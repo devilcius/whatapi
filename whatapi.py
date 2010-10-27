@@ -70,6 +70,8 @@ A list of the implemented webservices (from what.cd )
     * artist.getArtistSimilar
     * artist.getArtistRequests
 
+    + artist.setArtistInfo
+
 
 # Torrent
 
@@ -91,12 +93,14 @@ A list of the implemented webservices (from what.cd )
     * authenticate.getAuthenticatedUserId
     * authenticate.getAuthenticatedUserAuthCode
     * authenticate.getAuthenticatedUserDownload
+    * authenticate.getAuthenticatedUserUpload()
     * authenticate.getAuthenticatedUserRatio
     * authenticate.getAuthenticatedUserRequiredRatio
 
 """
 class ResponseBody:
-	pass
+    """A Response Body Object"""
+    pass
 
 class WhatBase(object):
     """An abstract webservices object."""
@@ -104,8 +108,9 @@ class WhatBase(object):
 
     def __init__(self, whatcd):
         self.whatcd = whatcd
-        #authenticate user
-        if Authenticate(self.whatcd).isAuthenticated() is False:
+        #if we are not autenticated in what.cd, do it now
+        if not self.whatcd.isAuthenticated():
+            print "authenticating..."
             self.whatcd.headers = Authenticate(self.whatcd).getAuthenticatedHeader()
 
     def _request(self,type, path, data, headers):
@@ -184,33 +189,39 @@ class Utils():
             string = string.replace("&%s;" %key, unichr(mapping[key]))
 
         return self.decodeHTMLEntities(string)
-    
-    def escape(self, html):
-        """Returns the given HTML with ampersands, quotes and carets encoded."""
-        return html.replace('&amp;','&').replace('&lt;','<').replace('&gt;','>').replace('&quot;','"').replace('&#39;',"'").replace('&deg','°')
+
 
 class WhatCD(object):
 
-	def __init__(self, username, password, site, loginpage, headers, authenticateduserinfo):
-            # This singleton class owns the singleton parser and utils
-            self.parser = Parser(self)
-            self.utils = Utils()
-            self.proxy_enabled = False
-            self.cache_backend = None
+	def __init__(self, username, password, site, loginpage, headers):
+
             #credentials
             self.username = username
             self.password = password
             self.site = site
             self.loginpage = loginpage
             self.headers = headers
-            self.authenticateduserinfo = authenticateduserinfo
+            self.authenticateduserinfo = {}
+            
+            self.cache_backend = None
+            self.proxy_enabled = False
+            self.proxy = None
+
+        def isAuthenticated(self):
+            """
+                Checks if we are authenticated in what.cd
+            """
+            if "id" in self.authenticateduserinfo:
+                return True
+            else:
+                return False
 
         def getCredentials(self):
             """
                 Returns an authenticated user credentials object
             """
-            self.authenticateduserinfo['retrieve'] = True
             return Authenticate(self)
+
 
         def getUser(self, username):
             """
@@ -232,12 +243,11 @@ class WhatCD(object):
 
         def enableProxy(self, host, port):
             """Enable a default web proxy"""
-            self.proxy = [host, self.utils._number(port)]
+            self.proxy = [host, Utils()._number(port)]
             self.proxy_enabled = True
 
         def disableProxy(self):
             """Disable using the web proxy"""
-
             self.proxy_enabled = False
 
         def isProxyEnabled(self):
@@ -258,12 +268,11 @@ class WhatCD(object):
 
             self.cache_backend = _ShelfCacheBackend(file_path)
 
-        def disableCatching(self):
+        def disableCaching(self):
             """Disables all caching features."""
-
             self.cache_backend = None
 
-        def isCatchingEnabled(self):
+        def isCachingEnabled(self):
             """Returns True if caching is enabled."""
 
             return not (self.cache_backend == None)
@@ -275,12 +284,9 @@ class WhatCD(object):
 def getWhatcdNetwork(username = "", password = ""):
     """
     Returns a preconfigured WhatCD object for what.cd
-
-    authenticated user: user logged in what.cd
-    username: a username of a valid what.cd user
-    password: user's password
-    headers: default headers
-
+    # Parameters:
+        * username str: a username of a valid what.cd user
+        * password str: user's password
     """
 
     return WhatCD (
@@ -292,16 +298,7 @@ def getWhatcdNetwork(username = "", password = ""):
                         "Content-type": "application/x-www-form-urlencoded",
                         'Accept-Charset': 'utf-8',
                         'User-Agent': "whatapi"
-                        },
-                    authenticateduserinfo = {
-                        "id": None,
-                        "authcode":"None",
-                        "upload":0,
-                        "downloaded":0,
-                        "ratio":0,
-                        "required":0,
-                        "retrieve":False
-                    })
+                        })
 
 
 
@@ -331,7 +328,8 @@ class Request(object):
         self.path = path
         self.data = data
         self.headers = headers
-        if whatcd.isCatchingEnabled():
+        #enable catching?
+        if whatcd.isCachingEnabled():
             self.cache = whatcd.getCacheBackend()
 
     def getCacheKey(self):
@@ -354,7 +352,8 @@ class Request(object):
         return self.cache.hasKey(self.getCacheKey())
 
     def downloadResponse(self):
-        print "downloading from what.cd"
+        """Returns a ResponseBody object from the server."""
+        print "downloading from %s" % (self.path)
         conn = httplib.HTTPConnection(self.whatcd.site)
         rb = ResponseBody()
         
@@ -372,8 +371,8 @@ class Request(object):
         return rb
 
     def execute(self, cacheable = False):
-        """Returns the HTML DOM response of the Request from the server"""
-        if self.whatcd.isCatchingEnabled() and cacheable:
+        """Depending if caching is enabled, returns response from the server or the cache"""
+        if self.whatcd.isCachingEnabled() and cacheable:
             response = self.getCachedResponse()
         else:
             response = self.downloadResponse()
@@ -383,36 +382,38 @@ class Request(object):
 class Authenticate(WhatBase):
 
     def __init__(self, whatcd):
-
+        """Create an authenticated user object.
+        # Parameters:
+            * whatcd object: WhatCD object.
+        """
         self.whatcd = whatcd
         self.parser = Parser(whatcd)
-        #if not loged in what.cd, do it
-        if self.isAuthenticated() is False:
-            self.whatcd.headers = self.getAuthenticatedHeader()
+        if not self.whatcd.isAuthenticated():
+            self.getAuthenticatedHeader()
+
 
     def getAuthenticatedHeader(self):
         """
             Log user in what.cd and returns the authenticated header
         """
+        homepage = None
+        #NB: cookie to avoid creating a lot of server sessions while testing this module
+        #TODO: remove it or set it as an option, and set loginform['keeplogged'] = 0?
         if os.path.exists("cookie"):
             f = open("cookie", "r")
             self.whatcd.headers = pickle.load(f)
         else:
             print "creating cookie"
             f = open('cookie', 'w')
-            headers = self._request("GET", self.whatcd.loginpage, "", self.whatcd.headers).execute(True).headers
-            cookie=dict(headers)['set-cookie']
-            web_session=re.search("web_session=[a-f0-9]+", cookie).group(0)
-            headers = { "Cookie": web_session, "Content-Type": "application/x-www-form-urlencoded"}
-
             loginform= {'username': self.whatcd.username, 'password': self.whatcd.password \
                     , 'keeplogged': '1', 'login': 'Login'}
             data = urllib.urlencode(loginform)
-            headers = self._request("POST", self.whatcd.loginpage, data, headers).execute(True).headers
+            response = self._request("POST", self.whatcd.loginpage, data, self.whatcd.headers).execute(True)
             try:
-                cookie=dict(headers)['set-cookie']
+                cookie=dict(response.headers)['set-cookie']
                 session=re.search("session=[^;]+", cookie).group(0)
-                self.whatcd.headers = { "Cookie": web_session + "; " + session }
+                self.whatcd.headers = { "Cookie": session }
+                homepage = response.body
                 pickle.dump(self.whatcd.headers, f)
             except (KeyError, AttributeError):
                 # Login failed, most likely bad creds or the site is down, nothing to do
@@ -420,29 +421,20 @@ class Authenticate(WhatBase):
                 self.whatcd.headers = None
         f.close()
 
-        #If credentials requested, get user authenticated user info
-        if self.whatcd.authenticateduserinfo["retrieve"]:
-            self.whatcd.authenticateduserinfo = self.getAuthenticatedUserInfo()
+        #set authenticated user info
+        if 'id' not in self.whatcd.authenticateduserinfo:
+            self.whatcd.authenticateduserinfo = self.getAuthenticatedUserInfo(homepage)
 
         return self.whatcd.headers
 
-    def getAuthenticatedUserInfo(self):
+    def getAuthenticatedUserInfo(self, homepage = None):
         """
             Returns authenticated user's info
         """
-        homepage = BeautifulSoup(self._request("GET", "/index.php", "", self.whatcd.headers).execute(True).body)
-        authuserinfo = self.parser.authenticatedUserInfo(homepage.find("div", {"id": "userinfo"}))
+        if not homepage:
+            homepage = BeautifulSoup(self._request("GET", "/index.php", "", self.whatcd.headers).execute(True).body)
+        authuserinfo = self._parser().authenticatedUserInfo(homepage.find("div", {"id": "userinfo"}))
         return authuserinfo
-
-
-    def isAuthenticated(self):
-        """
-            Checks if user is authenticated
-        """
-        if "Cookie" in self.whatcd.headers:
-            return True
-        else:
-            return False
 
     def getAuthenticatedUserId(self):
         """
@@ -490,7 +482,8 @@ class User(WhatBase):
     def __init__(self, username, whatcd):
         """Create an user object.
         # Parameters:
-            * name str: The user's name.
+            * username str: The user's name.
+            - whatcd object: the what.cd network object
         """
         WhatBase.__init__(self, whatcd)
         self.name = username
@@ -523,7 +516,8 @@ class User(WhatBase):
 
     def getInfo(self):
         """
-            Returns user's info if paranoia level is set to 0
+            Returns user's info if paranoia level is set to 0.
+            If paranoia is higher, it returns None.
         """
         if self.getUserId():
             form = {'id': self.getUserId()}
@@ -531,8 +525,8 @@ class User(WhatBase):
             userpage = BeautifulSoup(self._request("GET", self.userpage + data, "", self.whatcd.headers).execute(True).body)
             return self._parser().userInfo(userpage.find("div", {"class": "sidebar"}), self.name)
         else:
-            return None
             print "no user id retrieved"
+            return None
 
     def getUserStats(self):
         """
@@ -554,8 +548,10 @@ class User(WhatBase):
 
     def getTorrentsSeedingByUser(self,page=1):
         """
-            Returns a list with all user's seeding music torrents
-            in form of dictionary {page(tuple with current and total),tag, dlurl, id, artist, album}
+            Returns a list with all user's uploaded music torrents
+            in form of dictionary {page(tuple with current and total),tag, dlurl, id,
+            artist(a tuple with 1 artist name || 2 names in case of two artists || 'Various Artists' if V.A.},
+            album and artistid (a tuple with 1 artist id || 2 ids if 2 artists torrent || empty if V.A.}
         """
         url = "/"+self.getUserCommunityTorrentsSeeding()[1]+"&page=%d"%page
         torrentspage = BeautifulSoup(self._request("GET", url, "", self.whatcd.headers).execute(True).body)
@@ -563,8 +559,10 @@ class User(WhatBase):
 
     def getTorrentsSnatchedByUser(self,page=1):
         """
-            Returns a list with all user's snatched music torrents
-            in form of dictionary {page(tuple with current and total),tag, dlurl, id, artist, album}
+            Returns a list with all user's uploaded music torrents
+            in form of dictionary {page(tuple with current and total),tag, dlurl, id,
+            artist(a tuple with 1 artist name || 2 names in case of two artists || 'Various Artists' if V.A.},
+            album and artistid (a tuple with 1 artist id || 2 ids if 2 artists torrent || empty if V.A.}
         """
         url = "/"+self.getUserCommunityTorrentsSnatched()[1]+"&page=%d"%page
         torrentspage = BeautifulSoup(self._request("GET", url, "", self.whatcd.headers).execute(True).body)
@@ -573,7 +571,9 @@ class User(WhatBase):
     def getTorrentsUploadedByUser(self,page=1):
         """
             Returns a list with all user's uploaded music torrents
-            in form of dictionary {page(tuple with current and total),tag, dlurl, id, artist, album}
+            in form of dictionary {page(tuple with current and total),tag, dlurl, id,
+            artist(a tuple with 1 artist name || 2 names in case of two artists || 'Various Artists' if V.A.},
+            album and artistid (a tuple with 1 artist id || 2 ids if 2 artists torrent || empty if V.A.}
         """
         url = "/"+self.getUserCommunityTorrentsUploaded()[1]+"&page=%d"%page
         torrentspage = BeautifulSoup(self._request("GET", url, "", self.whatcd.headers).execute(True).body)
@@ -766,6 +766,7 @@ class Torrent(WhatBase):
         """Create a torrent object.
         # Parameters:
             * id str: The torrent's id.
+            * whatcd object: the WhatCD network object
         """
         WhatBase.__init__(self, whatcd)
         self.id = id
@@ -874,11 +875,13 @@ class Artist(WhatBase):
         """Create an artist object.
         # Parameters:
             * name str: The artist's name.
+            * whatcd object: The WhatCD network object
         """
         WhatBase.__init__(self, whatcd)
         self.name = name
         self.whatcd = whatcd
-        self.artistpage = "/artist.php?"
+        self.artistpage = "/artist.php"
+        self.utils = Utils()
         self.info = self.getInfo()
 
 
@@ -894,7 +897,7 @@ class Artist(WhatBase):
         """
         form = {'artistname': self.name}
         data = urllib.urlencode(form)
-        headers = self._request("GET", self.artistpage + data, "", self.whatcd.headers).execute(True).headers
+        headers = self._request("GET", self.artistpage +"?"+ data, "", self.whatcd.headers).execute(True).headers
         if dict(headers)['location'][0:14] != 'artist.php?id=':
             return None
         else:
@@ -902,16 +905,16 @@ class Artist(WhatBase):
 
     def getInfo(self):
         """
-            Returns user's info if paranoia level is set to 0
+            Returns artist's info, None if there isn't
         """
         if self.getArtistId():
             form = {'id': self.getArtistId()}
             data = urllib.urlencode(form)
-            artistpage = BeautifulSoup(self._request("GET", self.artistpage + data, "", self.whatcd.headers).execute(True).body)
+            artistpage = BeautifulSoup(self._request("GET", self.artistpage +"?"+ data, "", self.whatcd.headers).execute(True).body)
             return self._parser().artistInfo(artistpage)
         else:
-            return None
             print "no artist info retrieved"
+            return None
 
     def getArtistReleases(self):
         """
@@ -949,11 +952,44 @@ class Artist(WhatBase):
         """
         return self.info['requests']
 
-    def setArtistInfo(self, artist, info):
-        creds = self.whatcd.getCredentials()
-        print "authenticated user auth code:"
-        print creds.getAuthenticatedUserInfo()['authcode']
+    def setArtistInfo(self, id, info):
+        """
+            Updates what.cd artist's info and image
+            Returns 1 if artist info updated succesfully, 0 if not.
+        # Parameters:
+            * id str: what.cd artist's id
+            * info tuple: (The artist's info -str-, image url -str- (None if there isn't))
+        """
+        if info[0]:
+            params = {'action': 'edit','artistid':id}
+            data = urllib.urlencode(params)
 
+            edit_page = BeautifulSoup(self._request("GET", self.artistpage +"?"+ data, "", self.whatcd.headers).execute(True).body)
+            what_form = self._parser().whatForm(edit_page,'edit')
+            if info[1]:
+                image_to_post = info[1]
+            else:
+                image_to_post = what_form['image']
+            data_to_post = {'body': info[0].encode('utf-8'),
+                            'summary':'automated artist info insertion',\
+                            'image':image_to_post,\
+                            'artistid':what_form['artistid'],\
+                            'auth':what_form['auth'],\
+                            'action':what_form['action']}
+
+            #post artist's info
+            self.whatcd.headers['Content-type']="application/x-www-form-urlencoded"
+            response = self._request("POST", self.artistpage, urllib.urlencode(data_to_post), self.whatcd.headers).execute(False)
+            artist_id_returned = dict(response.headers)['location'][14:]
+            
+            if str(artist_id_returned) == str(what_form['artistid']) :
+                return 1
+            else:
+                return 0
+
+        else:
+             return 'no artist info provided. Aborting.'
+             exit()
 
 
 class Parser(object):
@@ -961,21 +997,6 @@ class Parser(object):
         def __init__(self,whatcd):
             self.utils = Utils()
             self.whatcd = whatcd
-            self.utils = Utils()
-
-	def handleExpatError(self, description, response, debugfile, messagecallback = None):
-            self.debugMessage(description, messagecallback)
-            self.debugMessage(traceback.format_exc(), messagecallback)
-
-            # Dump the search response for debug purposes
-            try:
-                self.debugMessage("Creating HTML dump for debug in file %s" % debugfile, messagecallback)
-                dumpfile = open(debugfile, "w")
-                dumpfile.write(response)
-                dumpfile.close()
-            except (IOError):
-                self.debugMessage("IO Error creating debug file", messagecallback)
-                self.debugMessage(traceback.format_exc(), messagecallback)
 
 	def authenticatedUserInfo(self, dom):
             """
@@ -1179,39 +1200,66 @@ class Parser(object):
                 navsoup = dom.find("div", {"class": "linkbox"})
                 #is there a page navigation bar?
                 if navsoup.contents:
-                    #there's more than 1 page of torrents
+                    #if there's more than 1 page of torrents
                     lastpage = navsoup.contents[-1]['href']
                     pages = lastpage[18:lastpage.find('&')]
                 else:
                     #there's only one page
                     pages = 1
                 #fetch all tr except first one (column head)
-                for torrent in torrentssoup.fetch('tr')[1:-1]:
+                for torrent in torrentssoup.fetch('tr')[1:]:
                     #exclude non music torrents
                     if torrent.find('td').find('div')['class'][0:10] == 'cats_music':
-                        #workaround to check artist field content
+                        #workaround to check artist field content, crazy
                         if len(torrent.findAll('td')[1].find('span').parent.contents) == 11:
                             #one artist
-                            torrentartist = torrent.findAll('td')[1].find('span').nextSibling.nextSibling.string
+                            torrentartist = (self.utils.decodeHTMLEntities(torrent.findAll('td')[1].find('span').nextSibling.nextSibling.string),)
+                            artistid = (torrent.findAll('td')[1].find('span').nextSibling.nextSibling['href'][14:],)
                             torrentalbum = torrent.findAll('td')[1].find('span').nextSibling.nextSibling.nextSibling.nextSibling.string
                         elif len(torrent.findAll('td')[1].find('span').parent.contents) == 9:
                             #various artists
-                            torrentartist = 'Various Artists'
+                            torrentartist = ('Various Artists',)
+                            artistid = ()
                             torrentalbum = torrent.findAll('td')[1].find('span').nextSibling.nextSibling.string
                         elif len(torrent.findAll('td')[1].find('span').parent.contents) == 13:
                             #two artists
-                            torrentartist = torrent.findAll('td')[1].find('span').nextSibling.nextSibling.string + " and " \
-                                + torrent.findAll('td')[1].find('span').nextSibling.nextSibling.nextSibling.nextSibling.string
+                            torrentartist = (self.utils.decodeHTMLEntities(torrent.findAll('td')[1].find('span').nextSibling.nextSibling.string), \
+                                self.utils.decodeHTMLEntities(torrent.findAll('td')[1].find('span').nextSibling.nextSibling.nextSibling.nextSibling.string))
+                            artistid = (torrent.findAll('td')[1].find('span').nextSibling.nextSibling['href'][14:],\
+                                torrent.findAll('td')[1].find('span').nextSibling.nextSibling.nextSibling.nextSibling['href'][14:])
                             torrentalbum = torrent.findAll('td')[1].find('span').nextSibling.nextSibling.nextSibling.nextSibling.nextSibling.nextSibling.string
                         torrenttag = torrent.find('td').contents[1]['title']
                         torrentdl = torrent.findAll('td')[1].find('span').findAll('a')[0]['href']
                         torrentrm = torrent.findAll('td')[1].find('span').findAll('a')[1]['href']
                         torrentid = torrentrm[torrentrm.rfind('=')+1:]
-                        torrentslist.append({'tag':torrenttag,'dlurl':torrentdl,'id':torrentid, \
-                                            'artist':self.utils.decodeHTMLEntities(torrentartist),\
+                        torrentslist.append({'tag':torrenttag,\
+                                            'dlurl':torrentdl,\
+                                            'id':torrentid, \
+                                            'artist':torrentartist,\
+                                            'artistid':artistid,\
                                             'album':self.utils.decodeHTMLEntities(torrentalbum),'pages':pages})
 
             return torrentslist
+
+        def whatForm(self, dom, action):
+            """
+                Parse a what.cd edit page and returns a dict with all form inputs/textareas names and values
+                # Parameters:
+                    * dom str: the edit page dom.
+                    + action str: the action value from the requested form
+            """
+            inputs = {}
+ 
+            form = dom.find('input',{'name':'action','value':action}).parent
+            elements = form.fetch(('input','textarea'))
+            #get all form elements except for submit input
+            for element in elements[0:-1]:
+                name = element.get('name',None)
+                if element.name == 'textarea':
+                    inputs[name] = element.string
+                else:
+                    inputs[name] = element.get('value',None)
+            return inputs
 
 
 
