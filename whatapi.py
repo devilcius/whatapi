@@ -1,11 +1,13 @@
 # -*- coding: utf_8 -*-
+__author__="devilcius"
+__date__ ="$Oct 23, 2010 11:21:12 PM$"
+
 import hashlib
 from BeautifulSoup import BeautifulSoup
 import httplib
 import os
 import pickle
 import re
-import traceback
 import urllib
 import shelve
 import tempfile
@@ -21,44 +23,44 @@ A list of the implemented webservices (from what.cd )
 
     * user.getUserId
     * user.getInfo
-    * user.getUserStats
-    * user.getUserPercentile
-    * user.getUserCommunity
-    * user.getTorrentsSeedingByUser
-    * user.getTorrentsSnatchedByUser
-    * user.getTorrentsUploadedByUser
 
-    * user.getUserJoinedDate
-    * user.getUserLastSeen
-    * user.getUserDataUploaded
-    * user.getUserDataDownloaded
-    * user.getUserRatio
-    * user.getUserRequiredRatio
+    * user.getTorrentsSeedingByUserId
+    * user.getTorrentsSnatchedByUserId
+    * user.getTorrentsUploadedByUserId
 
-    * user.getUserUploadedPercentile
-    * user.getUserDownloadedPercentile
-    * user.getUserUploadedPercentile
-    * user.getUserTorrentsUploadedPercentile
-    * user.getUserFilledRequestPercentile
-    * user.getUserBountySpentPercentile
-    * user.getUserPostsMadePercentile
-    * user.getUserArtistsAddedPercentile
-    * user.getUserOverallRankPercentile
-
-    * user.getUserCommunityForumPosts
-    * user.getUserCommunityTorrentsComments
-    * user.getUserCommunityStartedCollages
-    * user.getUserCommunityContributedCollages
-    * user.getUserCommunityRequestsFilled
-    * user.getUserCommunityRequestsVoted
-    * user.getUserCommunityTorrentsUploaded
-    * user.getUserCommunityUniqueGroups
-    * user.getUserCommunityPerfectFlacs
-    * user.getUserCommunityTorrentsSeeding
-    * user.getUserCommunityTorrentsLeeching
-    * user.getUserCommunityTorrentsSnatched
-    * user.getUserCommunityInvited
-    * user.getUserCommunityArtistsAdded
+    * user.specificUserInfo
+        Atributes:
+        ######## stats ###########
+        -joindate
+        -lastseen
+        -dataup
+        -datadown
+        -ratio
+        -rratio
+        ######## percentile ###########
+        -uppercentile
+        -downpercentile
+        -torrentsuppercentile
+        -reqfilledpercentile
+        -bountyspentpercentile
+        -postsmadepercentile
+        -artistsaddedpercentile
+        -overallpercentile
+        ######## community ###########
+        -postsmadecom
+        -torrentscommentscom
+        -collagesstartedcom
+        -collagescontrcon
+        -reqfilledcom
+        -reqvotedcom
+        -uploadedcom
+        -uniquecom
+        -perfectcom
+        -seedingcom
+        -leechingcom
+        -snatchedcom
+        -invitedcom
+        -artistsaddedcom
 
 
 # Artist
@@ -86,6 +88,8 @@ A list of the implemented webservices (from what.cd )
     * torrent.getTorrentFolderName
     * torrent.getTorrentFileList
     * torrent.getTorrentDescription
+    * torrent.isTorrentFreeLeech
+    * torrent.isTorrentReported
 
 
 # Authenticate
@@ -98,9 +102,15 @@ A list of the implemented webservices (from what.cd )
     * authenticate.getAuthenticatedUserRequiredRatio
 
 """
+
 class ResponseBody:
     """A Response Body Object"""
     pass
+
+class SpecificInformation:
+    """A Specific Information Object"""
+    pass
+
 
 class WhatBase(object):
     """An abstract webservices object."""
@@ -182,13 +192,6 @@ class Utils():
         entity_re = re.compile("&(#?)(\d{1,5}|\w{1,8});")
         return entity_re.subn(self.substituteEntity, string)[0]
     
-
-    def unescapeHTMLEntity(self,string):
-        mapping = htmlentitydefs.name2codepoint
-        for key in mapping:
-            string = string.replace("&%s;" %key, unichr(mapping[key]))
-
-        return self.decodeHTMLEntities(string)
 
 
 class WhatCD(object):
@@ -353,6 +356,7 @@ class Request(object):
 
     def downloadResponse(self):
         """Returns a ResponseBody object from the server."""
+        
         print "downloading from %s" % (self.path)
         conn = httplib.HTTPConnection(self.whatcd.site)
         rb = ResponseBody()
@@ -371,7 +375,7 @@ class Request(object):
         return rb
 
     def execute(self, cacheable = False):
-        """Depending if caching is enabled, returns response from the server or the cache"""
+        """Depending if caching is enabled, returns response from the server or, if available, the cached response"""
         if self.whatcd.isCachingEnabled() and cacheable:
             response = self.getCachedResponse()
         else:
@@ -490,7 +494,7 @@ class User(WhatBase):
         self.whatcd = whatcd
         self.userpage = "/user.php?"
         self.userid = None
-        self.userinfo = self.getInfo()
+        self.userinfo = None
 
     def getUserName(self):
         """
@@ -516,66 +520,80 @@ class User(WhatBase):
 
     def getInfo(self):
         """
-            Returns user's info if paranoia level is set to 0.
-            If paranoia is higher, it returns None.
+            Returns a dictionary of {percentile:{dataup str,
+                                                 datadown str,
+                                                 overall str,
+                                                 postmade str,
+                                                 boutyspent str,
+                                                 reqfilled str,
+                                                 artistsadded str,
+                                                 torrentsup str},
+                                     stats: {uploaded str,
+                                             ratio str,
+                                             joined str,
+                                             downloaded str,
+                                             lastseen str,
+                                             rratio str},
+                                     community: {uploaded tuple(total str, url str),
+                                                 forumposts tuple(total str, url str),
+                                                 invited tuple (total,None),
+                                                 perfectflacs tuple(total str, url str),
+                                                 contributedcollages tuple(total str, url str),
+                                                 reqvoted tuple(total str, url str),
+                                                 uniquegroups tuple(total str, url str)
+                                                 torrentscomments tuple(total str, url str),
+                                                 snatched tuple(total str, url str),
+                                                 artists str,
+                                                 reqfilled tuple(total str, url str),
+                                                 startedcollages tuple(total str, url str),
+                                                 leeching tuple(total str, url str),
+                                                 seeding tuple(total str, url str)}
+                                                }
+            If paranoia is not Off, it returns None.
         """
         if self.getUserId():
             form = {'id': self.getUserId()}
             data = urllib.urlencode(form)
             userpage = BeautifulSoup(self._request("GET", self.userpage + data, "", self.whatcd.headers).execute(True).body)
-            return self._parser().userInfo(userpage.find("div", {"class": "sidebar"}), self.name)
+            info = self._parser().userInfo(userpage.find("div", {"class": "sidebar"}), self.name)
+            self.userinfo = info
+            return info
         else:
             print "no user id retrieved"
             return None
 
-    def getUserStats(self):
-        """
-            Returns a dictionnary with user's general stats
-        """
-        return self.userinfo['stats']
 
-    def getUserPercentile(self):
-        """
-            Returns a dictionnary with user's percentile stats
-        """
-        return self.userinfo['percentile']
-
-    def getUserCommunity(self):
-        """
-            Returns a dictionnary with user's community stats
-        """
-        return self.userinfo['community']
-
-    def getTorrentsSeedingByUser(self,page=1):
+    def getTorrentsSeedingByUserId(self,userid,page=1):
         """
             Returns a list with all user's uploaded music torrents
             in form of dictionary {page(tuple with current and total),tag, dlurl, id,
             artist(a tuple with 1 artist name || 2 names in case of two artists || 'Various Artists' if V.A.},
             album and artistid (a tuple with 1 artist id || 2 ids if 2 artists torrent || empty if V.A.}
         """
-        url = "/"+self.getUserCommunityTorrentsSeeding()[1]+"&page=%d"%page
+
+        url = "/torrents.php?type=seeding&userid=%s&page=%d" % (userid,page)
         torrentspage = BeautifulSoup(self._request("GET", url, "", self.whatcd.headers).execute(True).body)
         return self._parser().torrentsList(torrentspage)
 
-    def getTorrentsSnatchedByUser(self,page=1):
+    def getTorrentsSnatchedByUserId(self,userid,page=1):
         """
             Returns a list with all user's uploaded music torrents
             in form of dictionary {page(tuple with current and total),tag, dlurl, id,
             artist(a tuple with 1 artist name || 2 names in case of two artists || 'Various Artists' if V.A.},
             album and artistid (a tuple with 1 artist id || 2 ids if 2 artists torrent || empty if V.A.}
         """
-        url = "/"+self.getUserCommunityTorrentsSnatched()[1]+"&page=%d"%page
+        url = "/torrents.php?type=snatched&userid=%s&page=%d" % (userid,page)
         torrentspage = BeautifulSoup(self._request("GET", url, "", self.whatcd.headers).execute(True).body)
         return self._parser().torrentsList(torrentspage)
 
-    def getTorrentsUploadedByUser(self,page=1):
+    def getTorrentsUploadedByUserId(self,userid,page=1):
         """
             Returns a list with all user's uploaded music torrents
             in form of dictionary {page(tuple with current and total),tag, dlurl, id,
             artist(a tuple with 1 artist name || 2 names in case of two artists || 'Various Artists' if V.A.},
             album and artistid (a tuple with 1 artist id || 2 ids if 2 artists torrent || empty if V.A.}
         """
-        url = "/"+self.getUserCommunityTorrentsUploaded()[1]+"&page=%d"%page
+        url = "/torrents.php?type=uploaded&userid=%s&page=%d" % (userid,page)
         torrentspage = BeautifulSoup(self._request("GET", url, "", self.whatcd.headers).execute(True).body)
         return self._parser().torrentsList(torrentspage)
 
@@ -585,179 +603,64 @@ class User(WhatBase):
     #              specific values                #
     ###############################################
 
-    ######## stats ###########
 
-    def getUserJoinedDate(self):
+    def specificUserInfo(self):
         """
-            Returns user's joined date
+            Returns specific attributes of user info. None if user's paranoia is on
         """
-        return self.userinfo['stats']['joined']
+        
+        info = SpecificInformation()
+        # Initialize attributes
+        info.joindate, info.lastseen, info.dataup, info.datadown,\
+            info.ratio, info.rratio,info.uppercentile,info.downpercentile, \
+            info.torrentsuppercentile,info.reqfilledpercentile,info.bountyspentpercentile, \
+            info.postsmadepercentile,info.artistsaddedpercentile,info.overallpercentile, \
+            info.postsmadecom,info.torrentscommentscom,info.collagesstartedcom,info.collagescontrcon, \
+            info.reqfilledcom,info.reqvotedcom,info.uploadedcom,info.uniquecom, info.perfectcom, \
+            info.seedingcom, info.leechingcom,info.snatchedcom,info.invitedcom,info.artistsaddedcom \
+            = (None,None, None, None,None,None,None,None,None,None,None,None,None, None,\
+                None,None,None,None,None,None,None,None,None,None,None,None,None,None)
+        
+        
+        if not self.userinfo and self.getInfo() is None:
+            pass
+        else:
+            ######## stats ###########
+            info.joindate = self.userinfo['stats']['joined']
+            info.lastseen = self.userinfo['stats']['lastseen']
+            info.dataup = self.userinfo['stats']['uploaded']
+            info.datadown =  self.userinfo['stats']['downloaded']
+            info.ratio = self.userinfo['stats']['ratio']
+            info.rratio = self.userinfo['stats']['rratio']
+            ######## percentile ###########
+            info.uppercentile = self.userinfo['percentile']['dataup']
+            info.downpercentile = self.userinfo['percentile']['datadown']
+            info.torrentsuppercentile = self.userinfo['percentile']['torrentsup']
+            info.reqfilledpercentile = self.userinfo['percentile']['reqfilled']
+            info.bountyspentpercentile = self.userinfo['percentile']['bountyspent']
+            info.postsmadepercentile = self.userinfo['percentile']['postsmade']
+            info.artistsaddedpercentile = self.userinfo['percentile']['artistsadded']
+            info.overallpercentile = self.userinfo['percentile']['overall']
+            ######## community ###########
+            info.postsmadecom = self.userinfo['community']['forumposts']
+            info.torrentscommentscom = self.userinfo['community']['torrentscomments']
+            info.collagesstartedcom = self.userinfo['community']['startedcollages']
+            info.collagescontrcon = self.userinfo['community']['contributedcollages']
+            info.reqfilledcom = self.userinfo['community']['reqfilled']
+            info.reqvotedcom = self.userinfo['community']['reqvoted']
+            info.uploadedcom = self.userinfo['community']['uploaded']
+            info.uniquecom = self.userinfo['community']['uniquegroups']
+            info.perfectcom = self.userinfo['community']['pefectflacs']
+            info.seedingcom = self.userinfo['community']['seeding']
+            info.leechingcom = self.userinfo['community']['leeching']
+            info.snatchedcom = self.userinfo['community']['snatched']
+            info.invitedcom = self.userinfo['community']['invited'][0]
+            info.artistsaddedcom = self.userinfo['community']['artists']
 
-    def getUserLastSeen(self):
-        """
-            Returns user's last seen date
-        """
-        return self.userinfo['stats']['lastseen']
 
-    def getUserDataUploaded(self):
-        """
-            Returns user's uploaded data amount
-        """
-        return self.userinfo['stats']['uploaded']
 
-    def getUserDataDownloaded(self):
-        """
-            Returns user's downloaded data amount
-        """
-        return self.userinfo['stats']['downloaded']
+        return info
 
-    def getUserRatio(self):
-        """
-            Returns user's ratio
-        """
-        return self.userinfo['stats']['ratio']
-
-    def getUserRequiredRatio(self):
-        """
-            Returns user's required ratio
-        """
-        return self.userinfo['stats']['rratio']
-
-    ######## percentile ###########
-
-    def getUserUploadedPercentile(self):
-        """
-            Returns user's uploaded percentile
-        """
-        return self.userinfo['percentile']['dataup']
-
-    def getUserDownloadedPercentile(self):
-        """
-            Returns user's uploaded percentile
-        """
-        return self.userinfo['percentile']['datadown']
-
-    def getUserTorrentsUploadedPercentile(self):
-        """
-            Returns user's torrents uploaded percentile
-        """
-        return self.userinfo['percentile']['torrentsup']
-
-    def getUserFilledRequestPercentile(self):
-        """
-            Returns user's filled requests percentile
-        """
-        return self.userinfo['percentile']['reqfilled']
-
-    def getUserBountySpentPercentile(self):
-        """
-            Returns user's bounty spent percentile
-        """
-        return self.userinfo['percentile']['bountyspent']
-
-    def getUserPostsMadePercentile(self):
-        """
-            Returns user's posts made percentile
-        """
-        return self.userinfo['percentile']['postsmade']
-
-    def getUserArtistsAddedPercentile(self):
-        """
-            Returns user's artists added percentile
-        """
-        return self.userinfo['percentile']['artistsadded']
-
-    def getUserOverallRankPercentile(self):
-        """
-            Returns user's overall ranking percentile
-        """
-        return self.userinfo['percentile']['overall']
-
-    ######## community ###########
-
-    def getUserCommunityForumPosts(self):
-        """
-            Returns a tuple with user's total forum posts and its relative url
-        """
-        return self.userinfo['community']['forumposts']
-
-    def getUserCommunityTorrentsComments(self):
-        """
-            Returns a tuple with user's total torrents comments and its relative url
-        """
-        return self.userinfo['community']['torrentscomments']
-
-    def getUserCommunityStartedCollages(self):
-        """
-            Returns a tuple with user's total started collages and its relative url
-        """
-        return self.userinfo['community']['startedcollages']
-
-    def getUserCommunityContributedCollages(self):
-        """
-            Returns a tuple with user's total contributed collages and its relative url
-        """
-        return self.userinfo['community']['contributedcollages']
-
-    def getUserCommunityRequestsFilled(self):
-        """
-            Returns a tuple with user's total requests filled and its relative url
-        """
-        return self.userinfo['community']['reqfilled']
-
-    def getUserCommunityRequestsVoted(self):
-        """
-            Returns a tuple with user's total requests voted and its relative url
-        """
-        return self.userinfo['community']['reqvoted']
-
-    def getUserCommunityTorrentsUploaded(self):
-        """
-            Returns a tuple with user's total torrents uploaded and its relative url
-        """
-        return self.userinfo['community']['uploaded']
-
-    def getUserCommunityUniqueGroups(self):
-        """
-            Returns a tuple with user's total unique groups and its relative url
-        """
-        return self.userinfo['community']['uniquegroups']
-
-    def getUserCommunityPerfectFlacs(self):
-        """
-            Returns a tuple with user's total perfect FLACS and its relative url
-        """
-        return self.userinfo['community']['pefectflacs']
-
-    def getUserCommunityTorrentsSeeding(self):
-        """
-            Returns a tuple with user's total torrents seeding and its relative url
-        """
-        return self.userinfo['community']['seeding']
-
-    def getUserCommunityTorrentsLeeching(self):
-        """
-            Returns a tuple with user's total torrents leeching and its relative url
-        """
-        return self.userinfo['community']['leeching']
-
-    def getUserCommunityTorrentsSnatched(self):
-        """
-            Returns a tuple with user's total torrents snatched and its relative url
-        """
-        return self.userinfo['community']['snatched']
-
-    def getUserCommunityInvited(self):
-        """
-            Returns user's total of invites
-        """
-        return self.userinfo['community']['invited'][0]
-
-    def getUserCommunityArtistsAdded(self):
-        """
-            Returns user's total of artists added
-        """
-        return self.userinfo['community']['artists']
 
 class Torrent(WhatBase):
     """A What.CD torrent"""
@@ -866,6 +769,18 @@ class Torrent(WhatBase):
             Returns torrent's description / empty string is there's none
         """
         return self.torrentinfo['torrent']['torrentdescription']
+
+    def isTorrentFreeLeech(self):
+        """
+            Returns True if torrent is freeleeech, False if not
+        """
+        return self.torrentinfo['torrent']['isfreeleech']
+    
+    def isTorrentReported(self):
+        """
+            Returns True if torrent is reported, False if not
+        """
+        return self.torrentinfo['torrent']['isreported']
 
 
 class Artist(WhatBase):
@@ -1035,15 +950,20 @@ class Parser(object):
 	def userInfo(self, dom, user):
             """
                 Parse an user's page and returns a dictionnary with its information
+
+            # Parameters:
+                * dom str: user page html
+                * user str: what.cd username
             """
             userInfo = {'stats':{}, 'percentile':{}, 'community':{}}
             soup = BeautifulSoup(str(dom))
 
             for div in soup.fetch('div',{'class':'box'}):
+
+                #if paronoia is not set to 'Off', stop collecting data
                 if div.findAll('div')[0].string == "Personal":
-                    if div.find('ul').findAll('li')[1].string != "Paranoia Level: 0":
-                        break
-                        return 0
+                    if div.find('ul').findAll('li')[1].contents[1].string.strip() != "Off":
+                        return None
 
             userInfo['stats']['joined'] = soup.findAll('li')[0].find('span')['title']
             userInfo['stats']['lastseen'] = soup.findAll('li')[1].find('span')['title']
@@ -1102,11 +1022,30 @@ class Parser(object):
             torrentInfo = {'torrent':{}}
             torrentfiles = []
             torrentdescription = ""
+            isreported = False
+            isfreeleech = False
             soup = BeautifulSoup(str(dom))
             groupidurl = soup.findAll('div', {'class':'linkbox'})[0].find('a')['href']
             torrentInfo['torrent']['parentid'] = groupidurl[groupidurl.rfind("=")+1:]
             torrentInfo['torrent']['downloadurl'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a',{'title':'Download'})[0]['href']
-            torrentInfo['torrent']['details'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].string[8:]
+            #is freeleech or/and reported?
+            #both
+            if len(soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents) == 4:
+                isreported = True
+                isfreeleech = True
+                torrentInfo['torrent']['details'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents[0].string[8:]
+            #either
+            elif len(soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents) == 2:
+                if soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents[1].string == 'Reported':
+                    isreported = True
+                elif soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents[1].string == 'Freeleech!':
+                    isreported = True
+                torrentInfo['torrent']['details'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents[0].string[8:]
+            #none
+            else:
+                torrentInfo['torrent']['details'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].string[8:]
+            torrentInfo['torrent']['isfreeleech'] = isfreeleech
+            torrentInfo['torrent']['isreported'] = isreported
             torrentInfo['torrent']['size'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('td')[1].string
             torrentInfo['torrent']['snatched'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('td')[2].string
             torrentInfo['torrent']['seeders'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('td')[3].string
@@ -1121,6 +1060,7 @@ class Parser(object):
             #is there any description?
             if len(soup.findAll('tr',{'id':'torrent_%s'%id})[0].findAll('blockquote')) > 1:
                 description = torrentInfo['torrent']['description'] = soup.findAll('tr',{'id':'torrent_%s'%id})[0].findAll('blockquote')[1].contents
+                info = ''
                 for content in description:
                     if content.string:
                         info = "%s%s" % (info, self.utils._string(content.string))
