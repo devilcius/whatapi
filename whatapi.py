@@ -1,4 +1,25 @@
 # -*- coding: utf_8 -*-
+#################################################################################
+#
+# Name: whatapi.py
+#
+# Synopsis: Module to manage what.cd as a web service
+#
+# Description: (a detailed description for software users.)
+#
+# Copyright 2010 devilcius
+#
+#                          The Wide Open License (WOL)
+#
+# Permission to use, copy, modify, distribute and sell this software and its
+# documentation for any purpose is hereby granted without fee, provided that
+# the above copyright notice and this license appear in all source copies.
+# THIS SOFTWARE IS PROVIDED "AS IS" WITHOUT EXPRESS OR IMPLIED WARRANTY OF
+# ANY KIND. See http://www.dspguru.com/wide-open-license for more information.
+#
+#################################################################################
+
+
 __author__="devilcius"
 __date__ ="$Oct 23, 2010 11:21:12 PM$"
 
@@ -191,7 +212,7 @@ class Utils():
     def decodeHTMLEntities(self, string):
         entity_re = re.compile("&(#?)(\d{1,5}|\w{1,8});")
         return entity_re.subn(self.substituteEntity, string)[0]
-    
+
 
 
 class WhatCD(object):
@@ -205,7 +226,7 @@ class WhatCD(object):
             self.loginpage = loginpage
             self.headers = headers
             self.authenticateduserinfo = {}
-            
+
             self.cache_backend = None
             self.proxy_enabled = False
             self.proxy = None
@@ -318,7 +339,7 @@ class _ShelfCacheBackend(object):
 
     def hasKey(self, key):
         return key in self.shelf.keys()
-    
+
 
 class Request(object):
     """web service operation."""
@@ -356,11 +377,11 @@ class Request(object):
 
     def downloadResponse(self):
         """Returns a ResponseBody object from the server."""
-        
+
         print "downloading from %s" % (self.path)
         conn = httplib.HTTPConnection(self.whatcd.site)
         rb = ResponseBody()
-        
+
         if self.whatcd.isProxyEnabled():
             conn = httplib.HTTPConnection(host = self.whatcd.getProxy()[0], port = self.whatcd.getProxy()[1])
             conn.request(method = self.type, url="http://" + self.whatcd.site + self.path, body = self.data, headers = self.headers)
@@ -608,7 +629,7 @@ class User(WhatBase):
         """
             Returns specific attributes of user info. None if user's paranoia is on
         """
-        
+
         info = SpecificInformation()
         # Initialize attributes
         info.joindate, info.lastseen, info.dataup, info.datadown,\
@@ -620,8 +641,8 @@ class User(WhatBase):
             info.seedingcom, info.leechingcom,info.snatchedcom,info.invitedcom,info.artistsaddedcom \
             = (None,None, None, None,None,None,None,None,None,None,None,None,None, None,\
                 None,None,None,None,None,None,None,None,None,None,None,None,None,None)
-        
-        
+
+
         if not self.userinfo and self.getInfo() is None:
             pass
         else:
@@ -775,7 +796,7 @@ class Torrent(WhatBase):
             Returns True if torrent is freeleeech, False if not
         """
         return self.torrentinfo['torrent']['isfreeleech']
-    
+
     def isTorrentReported(self):
         """
             Returns True if torrent is reported, False if not
@@ -896,7 +917,7 @@ class Artist(WhatBase):
             self.whatcd.headers['Content-type']="application/x-www-form-urlencoded"
             response = self._request("POST", self.artistpage, urllib.urlencode(data_to_post), self.whatcd.headers).execute(False)
             artist_id_returned = dict(response.headers)['location'][14:]
-            
+
             if str(artist_id_returned) == str(what_form['artistid']) :
                 return 1
             else:
@@ -1189,7 +1210,7 @@ class Parser(object):
                     + action str: the action value from the requested form
             """
             inputs = {}
- 
+
             form = dom.find('input',{'name':'action','value':action}).parent
             elements = form.fetch(('input','textarea'))
             #get all form elements except for submit input
