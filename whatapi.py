@@ -5,7 +5,7 @@
 #
 # Synopsis: Module to manage what.cd as a web service
 #
-# Description: (a detailed description for software users.)
+# Description: See below list of the implemented webservices
 #
 # Copyright 2010 devilcius
 #
