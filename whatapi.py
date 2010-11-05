@@ -32,7 +32,6 @@ import re
 import urllib
 import shelve
 import tempfile
-import htmlentitydefs
 from htmlentitydefs import name2codepoint as n2cp
 
 

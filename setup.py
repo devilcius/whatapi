@@ -8,11 +8,11 @@ setup(
     description = "Module to manage what.cd as a web service",
     author = "devilcius",
     author_email = "devilcius@gmail.com",
-    licence = "WOL",
+    license = "WOL",
     url = "http://predatum.com",
     download_url = "http://predatum.com/whatapi-lastest.tgz",
     keywords = ["api", "webservice", "what.cd"],
-    platform = "Windows,Linux",
+    platforms = "Windows,Linux",
     classifiers = [
         "Programming Language :: Python",
         "Development Status :: 3 - Alpha",
