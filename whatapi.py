@@ -24,7 +24,10 @@ __author__="devilcius"
 __date__ ="$Oct 23, 2010 11:21:12 PM$"
 
 import hashlib
-from BeautifulSoup import BeautifulSoup
+try:
+    from BeautifulSoup import BeautifulSoup
+except:
+    raise ImportError,"Please install BeautifulSoup 3.2 module from http://www.crummy.com/software/BeautifulSoup/#Download"
 import httplib
 import os
 import pickle
@@ -67,20 +70,20 @@ A list of the implemented webservices (from what.cd )
         -artistsaddedpercentile
         -overallpercentile
         ######## community ###########
-        -postsmadecom
-        -torrentscommentscom
-        -collagesstartedcom
-        -collagescontrcon
-        -reqfilledcom
-        -reqvotedcom
-        -uploadedcom
-        -uniquecom
-        -perfectcom
-        -seedingcom
-        -leechingcom
-        -snatchedcom
-        -invitedcom
-        -artistsaddedcom
+        -postsmade
+        -torrentscomments
+        -collagesstarted
+        -collagescontr
+        -reqfilled
+        -reqvoted
+        -uploaded
+        -unique
+        -perfect
+        -seeding
+        -leeching
+        -snatched
+        -invited
+        -artistsadded
 
 
 # Artist
@@ -377,7 +380,7 @@ class Request(object):
     def downloadResponse(self):
         """Returns a ResponseBody object from the server."""
 
-        print "downloading from %s" % (self.path)
+        #print "downloading from %s" % (self.path)
         conn = httplib.HTTPConnection(self.whatcd.site)
         rb = ResponseBody()
 
@@ -588,7 +591,7 @@ class User(WhatBase):
             Returns a list with all user's uploaded music torrents
             in form of dictionary {page(tuple with current and total),tag, dlurl, id,
             artist(a tuple with 1 artist name || 2 names in case of two artists || 'Various Artists' if V.A.},
-            album and artistid (a tuple with 1 artist id || 2 ids if 2 artists torrent || empty if V.A.}
+            album, year and artistid (a tuple with 1 artist id || 2 ids if 2 artists torrent || empty if V.A.}
         """
 
         url = "/torrents.php?type=seeding&userid=%s&page=%d" % (userid,page)
@@ -600,7 +603,7 @@ class User(WhatBase):
             Returns a list with all user's uploaded music torrents
             in form of dictionary {page(tuple with current and total),tag, dlurl, id,
             artist(a tuple with 1 artist name || 2 names in case of two artists || 'Various Artists' if V.A.},
-            album and artistid (a tuple with 1 artist id || 2 ids if 2 artists torrent || empty if V.A.}
+            album, year and artistid (a tuple with 1 artist id || 2 ids if 2 artists torrent || empty if V.A.}
         """
         url = "/torrents.php?type=snatched&userid=%s&page=%d" % (userid,page)
         torrentspage = BeautifulSoup(self._request("GET", url, "", self.whatcd.headers).execute(True).body)
@@ -611,7 +614,7 @@ class User(WhatBase):
             Returns a list with all user's uploaded music torrents
             in form of dictionary {page(tuple with current and total),tag, dlurl, id,
             artist(a tuple with 1 artist name || 2 names in case of two artists || 'Various Artists' if V.A.},
-            album and artistid (a tuple with 1 artist id || 2 ids if 2 artists torrent || empty if V.A.}
+            album, year and artistid (a tuple with 1 artist id || 2 ids if 2 artists torrent || empty if V.A.}
         """
         url = "/torrents.php?type=uploaded&userid=%s&page=%d" % (userid,page)
         torrentspage = BeautifulSoup(self._request("GET", url, "", self.whatcd.headers).execute(True).body)
@@ -932,6 +935,7 @@ class Parser(object):
         def __init__(self,whatcd):
             self.utils = Utils()
             self.whatcd = whatcd
+            self.totalpages = 0
 
 	def authenticatedUserInfo(self, dom):
             """
@@ -1158,29 +1162,37 @@ class Parser(object):
             #if there's at least 1 torrent in the list
             if torrentssoup:
                 navsoup = dom.find("div", {"class": "linkbox"})
+                pages = 1
+                regyear = re.compile('\[\d{4}\]')
+                
                 #is there a page navigation bar?
                 if navsoup.contents:
                     #if there's more than 1 page of torrents
-                    lastpage = navsoup.contents[-1]['href']
-                    pages = lastpage[18:lastpage.find('&')]
-                else:
-                    #there's only one page
-                    pages = 1
+                    if navsoup.contents[-1].has_key('href'):
+                        lastpage = navsoup.contents[-1]['href']
+                        pages = lastpage[18:lastpage.find('&')]
+                        self.totalpages = pages
+                    else: #we are at the last page, no href
+                        pages = self.totalpages+1
                 #fetch all tr except first one (column head)
                 for torrent in torrentssoup.fetch('tr')[1:]:
                     #exclude non music torrents
                     if torrent.find('td').find('div')['class'][0:10] == 'cats_music':
-                        #workaround to check artist field content, crazy
-                        if len(torrent.findAll('td')[1].find('span').parent.contents) == 11:
+                        
+                        if len(torrent.findAll('td')[1].find('span').parent.contents) == 11 or torrent.find('strong') or torrent.find('abbr'):
                             #one artist
                             torrentartist = (self.utils.decodeHTMLEntities(torrent.findAll('td')[1].find('span').nextSibling.nextSibling.string),)
                             artistid = (torrent.findAll('td')[1].find('span').nextSibling.nextSibling['href'][14:],)
                             torrentalbum = torrent.findAll('td')[1].find('span').nextSibling.nextSibling.nextSibling.nextSibling.string
+                            torrentyear = torrent.findAll('td')[1].find('span').nextSibling.nextSibling.nextSibling.nextSibling.nextSibling.string
+                            torrentyear = regyear.search(torrentyear).group(0)[1:5]
                         elif len(torrent.findAll('td')[1].find('span').parent.contents) == 9:
                             #various artists
                             torrentartist = ('Various Artists',)
                             artistid = ()
                             torrentalbum = torrent.findAll('td')[1].find('span').nextSibling.nextSibling.string
+                            torrentyear = torrent.findAll('td')[1].find('span').nextSibling.nextSibling.nextSibling.string
+                            torrentyear = regyear.search(torrentyear).group(0)[1:5]
                         elif len(torrent.findAll('td')[1].find('span').parent.contents) == 13:
                             #two artists
                             torrentartist = (self.utils.decodeHTMLEntities(torrent.findAll('td')[1].find('span').nextSibling.nextSibling.string), \
@@ -1188,6 +1200,9 @@ class Parser(object):
                             artistid = (torrent.findAll('td')[1].find('span').nextSibling.nextSibling['href'][14:],\
                                 torrent.findAll('td')[1].find('span').nextSibling.nextSibling.nextSibling.nextSibling['href'][14:])
                             torrentalbum = torrent.findAll('td')[1].find('span').nextSibling.nextSibling.nextSibling.nextSibling.nextSibling.nextSibling.string
+                            torrentyear = torrent.findAll('td')[1].find('span').nextSibling.nextSibling.nextSibling.nextSibling.nextSibling.nextSibling.nextSibling.string
+                            torrentyear = regyear.search(torrentyear).group(0)[1:5]
+                            
                         torrenttag = torrent.find('td').contents[1]['title']
                         torrentdl = torrent.findAll('td')[1].find('span').findAll('a')[0]['href']
                         torrentrm = torrent.findAll('td')[1].find('span').findAll('a')[1]['href']
@@ -1197,7 +1212,9 @@ class Parser(object):
                                             'id':torrentid, \
                                             'artist':torrentartist,\
                                             'artistid':artistid,\
-                                            'album':self.utils.decodeHTMLEntities(torrentalbum),'pages':pages})
+                                            'album':self.utils.decodeHTMLEntities(torrentalbum),
+                                            'year':torrentyear,
+                                            'pages':pages})
 
             return torrentslist
 
