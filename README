@@ -83,6 +83,7 @@ A list of the implemented webservices (from what.cd )
     * torrent.getTorrentDescription
     * torrent.isTorrentFreeLeech
     * torrent.isTorrentReported
+    * torrent.getTorrentReleaseType
 
 
 # Authenticate
