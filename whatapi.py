@@ -591,7 +591,7 @@ class User(WhatBase):
             Returns a list with all user's uploaded music torrents
             in form of dictionary {page(tuple with current and total),tag, dlurl, id,
             artist(a tuple with 1 artist name || 2 names in case of two artists || 'Various Artists' if V.A.},
-            album, year and artistid (a tuple with 1 artist id || 2 ids if 2 artists torrent || empty if V.A.}
+            album, release type, scene, year and artistid (a tuple with 1 artist id || 2 ids if 2 artists torrent || empty if V.A.}
         """
         if self.userid is None:
             self.userid = self.getUserId()
@@ -604,7 +604,7 @@ class User(WhatBase):
             Returns a list with all user's uploaded music torrents
             in form of dictionary {page(tuple with current and total),tag, dlurl, id,
             artist(a tuple with 1 artist name || 2 names in case of two artists || 'Various Artists' if V.A.},
-            album, year and artistid (a tuple with 1 artist id || 2 ids if 2 artists torrent || empty if V.A.}
+            album, release type, scene, year and artistid (a tuple with 1 artist id || 2 ids if 2 artists torrent || empty if V.A.}
         """
         if self.userid is None:
             self.userid = self.getUserId()            
@@ -617,7 +617,7 @@ class User(WhatBase):
             Returns a list with all user's uploaded music torrents
             in form of dictionary {page(tuple with current and total),tag, dlurl, id,
             artist(a tuple with 1 artist name || 2 names in case of two artists || 'Various Artists' if V.A.},
-            album, year and artistid (a tuple with 1 artist id || 2 ids if 2 artists torrent || empty if V.A.}
+            album, release type, scene, year and artistid (a tuple with 1 artist id || 2 ids if 2 artists torrent || empty if V.A.}
         """
         if self.userid is None:
             self.userid = self.getUserId()   
@@ -743,9 +743,21 @@ class Torrent(WhatBase):
 
     def getTorrentDetails(self):
         """
-            Returns torrent's details (format / bitrate / media)
+            Returns torrent's details (format / bitrate)
         """
         return self.torrentinfo['torrent']['details']
+
+    def getTorrentEditionInfo(self):
+        """
+            Returns torrent's edition info (Edition information / media type)
+        """
+        return self.torrentinfo['torrent']['editioninfo']
+
+    def getTorrentMediaType(self):
+        """
+            Returns torrent's media type
+        """
+        return self.torrentinfo['torrent']['rlsmedia']    
 
     def getTorrentSize(self):
         """
@@ -1060,28 +1072,32 @@ class Parser(object):
             isreported = False
             isfreeleech = False
             soup = BeautifulSoup(str(dom))
+            torrentInfo['torrent']['editioninfo'] = soup.findAll('td', {'class':'edition_info'})[0].find('strong').contents[-1]
+            regrlsmedia = re.compile('CD|DVD|Vinyl|Soundboard|SACD|Cassette|WEB|Blu-ray')
+            torrentInfo['torrent']['rlsmedia'] = regrlsmedia.search(torrentInfo['torrent']['editioninfo']).group(0)
             groupidurl = soup.findAll('div', {'class':'linkbox'})[0].find('a')['href']
             torrentInfo['torrent']['parentid'] = groupidurl[groupidurl.rfind("=")+1:]
             torrentInfo['torrent']['downloadurl'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a',{'title':'Download'})[0]['href']
             regrlstype = re.compile('Album|Soundtrack|EP|Anthology|Compilation|Single|Live album|Remix|Bootleg|Interview|Mixtape|Unknown')
             torrentInfo['torrent']['rlstype'] = regrlstype.search(soup.find('div', {'class':'thin'}).find('h2').contents[1]).group(0)
 
-            #is freeleech or/and reported?
+            ## is freeleech or/and reported? ##
+            
             #both
             if len(soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents) == 4:
                 isreported = True
                 isfreeleech = True
-                torrentInfo['torrent']['details'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents[0].string[8:]
+                torrentInfo['torrent']['details'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents[0]
             #either
             elif len(soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents) == 2:
                 if soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents[1].string == 'Reported':
                     isreported = True
                 elif soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents[1].string == 'Freeleech!':
                     isreported = True
-                torrentInfo['torrent']['details'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents[0].string[8:]
+                torrentInfo['torrent']['details'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents[0]
             #none
             else:
-                torrentInfo['torrent']['details'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].string[8:]
+                torrentInfo['torrent']['details'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents[0]
             torrentInfo['torrent']['isfreeleech'] = isfreeleech
             torrentInfo['torrent']['isreported'] = isreported
             torrentInfo['torrent']['size'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('td')[1].string
@@ -1090,7 +1106,11 @@ class Parser(object):
             torrentInfo['torrent']['leechers'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('td')[4].string
             torrentInfo['torrent']['uploadedby'] = soup.findAll('tr',{'id':'torrent_%s'%id})[0].findAll('a')[0].string
             foldername = soup.findAll('div',{'id':'files_%s'%id})[0].findAll('div')[1].string
-            torrentInfo['torrent']['foldername'] = self.utils.decodeHTMLEntities(foldername)
+            
+            if(foldername is None):
+                torrentInfo['torrent']['foldername'] = None
+            else:
+                torrentInfo['torrent']['foldername'] = self.utils.decodeHTMLEntities(foldername)
             files = soup.findAll('div',{'id':'files_%s'%id})[0].findAll('tr')
             for file in files[1:-1]:
                 torrentfiles.append(self.utils.decodeHTMLEntities(file.contents[0].string))
