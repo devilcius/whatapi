@@ -23,6 +23,7 @@
 __author__="devilcius"
 __date__ ="$Oct 23, 2010 11:21:12 PM$"
 
+
 import hashlib
 try:
     from BeautifulSoup import BeautifulSoup
@@ -50,6 +51,7 @@ A list of the implemented webservices (from what.cd )
     * user.getTorrentsSeeding
     * user.getTorrentsSnatched
     * user.getTorrentsUploaded
+    * user.getTorrentsCommented
 
     * user.specificUserInfo
         Atributes:
@@ -111,6 +113,7 @@ A list of the implemented webservices (from what.cd )
     * torrent.getTorrentFolderName
     * torrent.getTorrentFileList
     * torrent.getTorrentDescription
+    * torrent.getTorrentComments
     * torrent.isTorrentFreeLeech
     * torrent.isTorrentReported
 
@@ -255,11 +258,17 @@ class WhatCD(object):
             """
             return User(username, self)
 
-        def getTorrent(self, id):
+        def getTorrent(self, id, page=1):
             """
                 Returns a torrent object
             """
-            return Torrent(id, self)
+            return Torrent(id, page, None, self)
+
+        def getTorrentGroup(self, id, page=1):
+            """
+                Returns a torrent object
+            """
+            return Torrent(id, page, True, self)
 
         def getArtist(self, name):
             """
@@ -323,7 +332,7 @@ def getWhatcdNetwork(username = "", password = ""):
                     headers = {
                         "Content-type": "application/x-www-form-urlencoded",
                         'Accept-Charset': 'utf-8',
-                        'User-Agent': "whatapi"
+                        'User-Agent': "whatapi [devilcius]"
                         })
 
 
@@ -418,36 +427,41 @@ class Authenticate(WhatBase):
         if not self.whatcd.isAuthenticated():
             self.getAuthenticatedHeader()
 
+    def setCookie(self):
+        print "creating cookie"
+        f = open('cookie', 'w')
+        loginform= {'username': self.whatcd.username, 'password': self.whatcd.password \
+                , 'keeplogged': '1', 'login': 'Login'}
+        data = urllib.urlencode(loginform)
+        response = self._request("POST", self.whatcd.loginpage, data, self.whatcd.headers).execute(True)
+        try:
+            cookie=dict(response.headers)['set-cookie']
+            session=re.search("session=[^;]+", cookie).group(0)
+            self.whatcd.headers["Cookie"] = session
+            homepage = response.body
+            pickle.dump(self.whatcd.headers, f)
+        except (KeyError, AttributeError):
+            print "Login failed, most likely bad creds or the site is down, nothing to do"
+            os.remove('cookie')
+            self.whatcd.headers = None
+        f.close()
+
 
     def getAuthenticatedHeader(self):
         """
             Log user in what.cd and returns the authenticated header
         """
         homepage = None
-        #NB: cookie to avoid creating a lot of server sessions while testing this module
-        #TODO: remove it or set it as an option, and set loginform['keeplogged'] = 0?
         if os.path.exists("cookie"):
             f = open("cookie", "r")
-            self.whatcd.headers = pickle.load(f)
-        else:
-            print "creating cookie"
-            f = open('cookie', 'w')
-            loginform= {'username': self.whatcd.username, 'password': self.whatcd.password \
-                    , 'keeplogged': '1', 'login': 'Login'}
-            data = urllib.urlencode(loginform)
-            response = self._request("POST", self.whatcd.loginpage, data, self.whatcd.headers).execute(True)
             try:
-                cookie=dict(response.headers)['set-cookie']
-                session=re.search("session=[^;]+", cookie).group(0)
-                self.whatcd.headers = { "Cookie": session }
-                homepage = response.body
-                pickle.dump(self.whatcd.headers, f)
-            except (KeyError, AttributeError):
-                # Login failed, most likely bad creds or the site is down, nothing to do
-                print "login failed"
-                self.whatcd.headers = None
-        f.close()
-
+                self.whatcd.headers = pickle.load(f)
+            except EOFError:
+                os.remove("cookie")
+                print "invalid cookie, removed"
+                self.setCookie()
+        else:
+            self.setCookie()
         #set authenticated user info
         if 'id' not in self.whatcd.authenticateduserinfo:
             self.whatcd.authenticateduserinfo = self.getAuthenticatedUserInfo(homepage)
@@ -607,7 +621,7 @@ class User(WhatBase):
             album, release type, scene, year and artistid (a tuple with 1 artist id || 2 ids if 2 artists torrent || empty if V.A.}
         """
         if self.userid is None:
-            self.userid = self.getUserId()            
+            self.userid = self.getUserId()
         url = "/torrents.php?type=snatched&userid=%s&page=%d" % (self.userid,page)
         torrentspage = BeautifulSoup(self._request("GET", url, "", self.whatcd.headers).execute(True).body)
         return self._parser().torrentsList(torrentspage)
@@ -620,10 +634,24 @@ class User(WhatBase):
             album, release type, scene, year and artistid (a tuple with 1 artist id || 2 ids if 2 artists torrent || empty if V.A.}
         """
         if self.userid is None:
-            self.userid = self.getUserId()   
+            self.userid = self.getUserId()
         url = "/torrents.php?type=uploaded&userid=%s&page=%d" % (self.userid,page)
         torrentspage = BeautifulSoup(self._request("GET", url, "", self.whatcd.headers).execute(True).body)
         return self._parser().torrentsList(torrentspage)
+
+
+    def getTorrentsCommented(self, page=1):
+        """
+            Returns a list with all user's commented torrents
+            in form of dictionary {postid, torrentid, comment,postdate, pages}
+
+        """
+        if self.userid is None:
+            self.userid = self.getUserId()
+
+        url = "/%s&page=%d" % (self.specificUserInfo().torrentscomments[1],page)
+        torrentspage = BeautifulSoup(self._request("GET", url, "", self.whatcd.headers).execute(True).body)
+        return self._parser().postsList(torrentspage)
 
 
 
@@ -636,7 +664,6 @@ class User(WhatBase):
         """
             Returns specific attributes of user info. None if user's paranoia is on
         """
-
         info = SpecificInformation()
         # Initialize attributes
         info.joindate, info.lastseen, info.dataup, info.datadown,\
@@ -671,7 +698,7 @@ class User(WhatBase):
             info.overallpercentile = self.userinfo['percentile']['overall']
             ######## community ###########
             info.postsmadecom = self.userinfo['community']['forumposts']
-            info.torrentscommentscom = self.userinfo['community']['torrentscomments']
+            info.torrentscomments = self.userinfo['community']['torrentscomments']
             info.collagesstartedcom = self.userinfo['community']['startedcollages']
             info.collagescontrcon = self.userinfo['community']['contributedcollages']
             info.reqfilledcom = self.userinfo['community']['reqfilled']
@@ -693,140 +720,182 @@ class User(WhatBase):
 class Torrent(WhatBase):
     """A What.CD torrent"""
 
-    def __init__(self, id, whatcd):
+    def __init__(self, id, page, isparent, whatcd):
         """Create a torrent object.
         # Parameters:
             * id str: The torrent's id.
             * whatcd object: the WhatCD network object
+            * page: The torrent page's number [optional]
         """
         WhatBase.__init__(self, whatcd)
         self.id = id
+        self.page = page
         self.whatcd = whatcd
-        self.torrentspage = "/torrents.php?"
+        self.isParent = isparent
+        self.torrentpage = "/torrents.php?"
         self.torrentinfo = self.getInfo()
+
 
     def getTorrentUrl(self):
         """
             Returns a dictionnary torrent's real URL
         """
-        form = {'torrentid': self.id}
+        if self.isParent:
+            form = {'id': self.id, 'page':self.page}
+            data = urllib.urlencode(form)
+            return self.torrentpage + data
+        else:
+            form = {'torrentid': self.id, 'page':self.page}
         data = urllib.urlencode(form)
-        headers = self._request("GET", self.torrentspage + data, "", self.whatcd.headers).execute(True).headers
+        headers = self._request("GET", self.torrentpage + data, "", self.whatcd.headers).execute(True).headers
         if dict(headers) is None:
             return None
         else:
             return dict(headers)['location']
 
+
     def getInfo(self):
         """
             Returns a dictionnary with torrents's info
         """
-        if self.getTorrentUrl():
-            torrentpage = BeautifulSoup(self._request("GET", "/"+self.getTorrentUrl(), "", self.whatcd.headers).execute(True).body)
-            return self._parser().torrentInfo(torrentpage, self.id)
-        else:
+        torrentpage = BeautifulSoup(self._request("GET", "/"+self.getTorrentUrl(), "", self.whatcd.headers).execute(True).body)
+
+        if 'Site log' in torrentpage.find("title").string:
+            print "no torrent retrieved with such id"
             return None
-            print "no user id retrieved"
+        else:
+            return self._parser().torrentInfo(torrentpage, self.id, self.isParent)
 
 
     def getTorrentParentId(self):
         """
             Returns torrent's group id
         """
-        return self.torrentinfo['torrent']['parentid']
+        if self.torrentinfo:
+            return self.torrentinfo['torrent']['parentid']
 
     def getTorrentDownloadURL(self):
         """
             Returns relative url to download the torrent
         """
-        return self.torrentinfo['torrent']['downloadurl']
+        if self.torrentinfo:
+            return self.torrentinfo['torrent']['downloadurl']
 
     def getTorrentDetails(self):
         """
             Returns torrent's details (format / bitrate)
         """
-        return self.torrentinfo['torrent']['details']
+        if self.torrentinfo:
+            return self.torrentinfo['torrent']['details']
 
     def getTorrentEditionInfo(self):
         """
             Returns torrent's edition info (Edition information / media type)
         """
-        return self.torrentinfo['torrent']['editioninfo']
+        if self.torrentinfo:
+            return self.torrentinfo['torrent']['editioninfo']
 
     def getTorrentMediaType(self):
         """
             Returns torrent's media type
         """
-        return self.torrentinfo['torrent']['rlsmedia']    
+        if self.torrentinfo:
+            return self.torrentinfo['torrent']['rlsmedia']
 
     def getTorrentSize(self):
         """
             Returns torrent's size
         """
-        return self.torrentinfo['torrent']['size']
+        if self.torrentinfo:
+            return self.torrentinfo['torrent']['size']
 
 
     def getTorrentSnatched(self):
         """
             Returns torrent's total snatches
         """
-        return self.torrentinfo['torrent']['snatched']
+        if self.torrentinfo:
+            return self.torrentinfo['torrent']['snatched']
 
 
     def getTorrentSeeders(self):
         """
             Returns torrent's current seeders
         """
-        return self.torrentinfo['torrent']['seeders']
+        if self.torrentinfo:
+            return self.torrentinfo['torrent']['seeders']
 
     def getTorrentLeechers(self):
         """
             Returns torrent's current leechers
         """
-        return self.torrentinfo['torrent']['leechers']
+        if self.torrentinfo:
+            return self.torrentinfo['torrent']['leechers']
 
     def getTorrentUploadedBy(self):
         """
             Returns torrent's uploader
         """
-        return self.torrentinfo['torrent']['uploadedby']
+        if self.torrentinfo:
+            return self.torrentinfo['torrent']['uploadedby']
 
     def getTorrentFolderName(self):
         """
             Returns torrent's folder name
         """
-        return self.torrentinfo['torrent']['foldername']
+        if self.torrentinfo:
+            return self.torrentinfo['torrent']['foldername']
 
     def getTorrentFileList(self):
         """
             Returns torrent's file list
         """
-        return self.torrentinfo['torrent']['filelist']
+        if self.torrentinfo:
+            return self.torrentinfo['torrent']['filelist']
 
 
     def getTorrentReleaseType(self):
         """
             Returns torrent's release type
         """
-        return self.torrentinfo['torrent']['rlstype']
+        if self.torrentinfo:
+            return self.torrentinfo['torrent']['rlstype']
 
     def getTorrentDescription(self):
         """
             Returns torrent's description / empty string is there's none
         """
-        return self.torrentinfo['torrent']['torrentdescription']
+        if self.torrentinfo:
+            return self.torrentinfo['torrent']['torrentdescription']
+
+    def getTorrentComments(self):
+        """
+            Returns a list of dictionnaries with each comment in the torrent page
+            {postid,post,userid,username}
+        """
+        if self.torrentinfo:
+            return self.torrentinfo['torrent']['comments']
+
+    def getTorrentCommentsPagesNumber(self):
+        """
+            Returns number of pages of comments in the torrent
+        """
+        if self.torrentinfo:
+            return self.torrentInfo['torrent']['commentspages']
 
     def isTorrentFreeLeech(self):
         """
             Returns True if torrent is freeleeech, False if not
         """
-        return self.torrentinfo['torrent']['isfreeleech']
+        if self.torrentinfo:
+            return self.torrentinfo['torrent']['isfreeleech']
 
     def isTorrentReported(self):
         """
             Returns True if torrent is reported, False if not
         """
-        return self.torrentinfo['torrent']['isreported']
+        if self.torrentinfo:
+            return self.torrentinfo['torrent']['isreported']
 
 
 class Artist(WhatBase):
@@ -1012,118 +1081,144 @@ class Parser(object):
                     if div.find('ul').findAll('li')[1].contents[1].string.strip() != "Off":
                         return None
 
-            userInfo['stats']['joined'] = soup.findAll('li')[0].find('span')['title']
-            userInfo['stats']['lastseen'] = soup.findAll('li')[1].find('span')['title']
-            userInfo['stats']['uploaded'] = soup.findAll('li')[2].string[10:]
-            userInfo['stats']['downloaded'] = soup.findAll('li')[3].string[12:]
-            userInfo['stats']['ratio'] = soup.findAll('li')[4].find('span').string
-            userInfo['stats']['rratio'] = soup.findAll('li')[5].string[16:]
-            userInfo['percentile']['dataup'] = soup.findAll('li')[6].string[15:]
-            userInfo['percentile']['datadown'] = soup.findAll('li')[7].string[17:]
-            userInfo['percentile']['torrentsup'] = soup.findAll('li')[8].string[19:]
-            userInfo['percentile']['reqfilled'] = soup.findAll('li')[9].string[17:]
-            userInfo['percentile']['bountyspent'] = soup.findAll('li')[10].string[14:]
-            userInfo['percentile']['postsmade'] = soup.findAll('li')[11].string[12:]
-            userInfo['percentile']['artistsadded'] = soup.findAll('li')[12].string[15:]
-            userInfo['percentile']['overall'] = soup.findAll('li')[13].find('strong').string[14:]
-            '''community section. Returns a tuple (stats,url)
-            if user == authenticated user, sum 2 to array position to skip email and passkey <li>s
-            shown in personal information'''
-            if user == self.whatcd.username:i = 2
-            else:i = 0
-            userInfo['community']['forumposts'] = (soup.findAll('li')[16+i].contents[0].string[13:len(soup.findAll('li')[16+i].contents[0].string)-2],\
-                                                        soup.findAll('li')[16+i].find('a')['href'])
-            userInfo['community']['torrentscomments'] = (soup.findAll('li')[17+i].contents[0].string[18:len(soup.findAll('li')[17+i].contents[0].string)-2],\
-                                                        soup.findAll('li')[17+i].find('a')['href'])
-            userInfo['community']['startedcollages'] = (soup.findAll('li')[18+i].contents[0].string[18:len(soup.findAll('li')[18+i].contents[0].string)-2],\
-                                                        soup.findAll('li')[18+i].find('a')['href'])
-            userInfo['community']['contributedcollages'] = (soup.findAll('li')[19+i].contents[0].string[25:len(soup.findAll('li')[19+i].contents[0].string)-2],\
-                                                        soup.findAll('li')[19+i].find('a')['href'])
-            userInfo['community']['reqfilled'] = (soup.findAll('li')[20+i].contents[0].string[17:len(soup.findAll('li')[20+i].contents[0].string)-2],\
-                                                        soup.findAll('li')[20+i].find('a')['href'])
-            userInfo['community']['reqvoted'] = (soup.findAll('li')[21+i].contents[0].string[16:len(soup.findAll('li')[21+i].contents[0].string)-2],\
-                                                        soup.findAll('li')[21+i].find('a')['href'])
-            userInfo['community']['uploaded'] = (soup.findAll('li')[22+i].contents[0].string[10:len(soup.findAll('li')[22+i].contents[0].string)-2],\
-                                                        soup.findAll('li')[22+i].find('a')['href'])
-            userInfo['community']['uniquegroups'] = (soup.findAll('li')[23+i].contents[0].string[15:len(soup.findAll('li')[23+i].contents[0].string)-2],\
-                                                        soup.findAll('li')[23+i].find('a')['href'])
-            userInfo['community']['pefectflacs'] = (soup.findAll('li')[24+i].contents[0].string[16:len(soup.findAll('li')[24+i].contents[0].string)-2],\
-                                                        soup.findAll('li')[24+i].find('a')['href'])
-            userInfo['community']['seeding'] = (soup.findAll('li')[25+i].contents[0].string[9:len(soup.findAll('li')[25+i].contents[0].string)-2],\
-                                                        soup.findAll('li')[25+i].find('a')['href'])
-            userInfo['community']['leeching'] = (soup.findAll('li')[26+i].contents[0].string[10:len(soup.findAll('li')[26+i].contents[0].string)-2],\
-                                                        soup.findAll('li')[26+i].find('a')['href'])
+            statscontainer = soup.findAll('div', {'class':'box'})[1]
+            percentilecontainer = soup.findAll('div', {'class':'box'})[2]
+            communitycontainer = soup.findAll('div', {'class':'box'})[4]
+
+
+            userInfo['stats']['joined'] = statscontainer.findAll('li')[0].find('span')['title']
+            userInfo['stats']['lastseen'] = statscontainer.findAll('li')[1].find('span')['title']
+            userInfo['stats']['uploaded'] = statscontainer.findAll('li')[2].string[10:]
+            userInfo['stats']['downloaded'] = statscontainer.findAll('li')[3].string[12:]
+            userInfo['stats']['ratio'] = statscontainer.findAll('li')[4].find('span').string
+            userInfo['stats']['rratio'] = statscontainer.findAll('li')[5].string[16:]
+            userInfo['percentile']['dataup'] = percentilecontainer.findAll('li')[0].string[15:]
+            userInfo['percentile']['datadown'] = percentilecontainer.findAll('li')[1].string[17:]
+            userInfo['percentile']['torrentsup'] = percentilecontainer.findAll('li')[2].string[19:]
+            userInfo['percentile']['reqfilled'] = percentilecontainer.findAll('li')[3].string[17:]
+            userInfo['percentile']['bountyspent'] = percentilecontainer.findAll('li')[4].string[14:]
+            userInfo['percentile']['postsmade'] = percentilecontainer.findAll('li')[5].string[12:]
+            userInfo['percentile']['artistsadded'] = percentilecontainer.findAll('li')[6].string[15:]
+            userInfo['percentile']['overall'] = percentilecontainer.findAll('li')[7].find('strong').string[14:]
+
+            userInfo['community']['forumposts'] = (communitycontainer.findAll('li')[0].contents[0].string[13:len(communitycontainer.findAll('li')[0].contents[0].string)-2],\
+                                                        communitycontainer.findAll('li')[0].find('a')['href'])
+            userInfo['community']['torrentscomments'] = (communitycontainer.findAll('li')[1].contents[0].string[18:len(communitycontainer.findAll('li')[1].contents[0].string)-2],\
+                                                        communitycontainer.findAll('li')[1].find('a')['href'])
+            userInfo['community']['startedcollages'] = (communitycontainer.findAll('li')[2].contents[0].string[18:len(communitycontainer.findAll('li')[2].contents[0].string)-2],\
+                                                        communitycontainer.findAll('li')[2].find('a')['href'])
+            userInfo['community']['contributedcollages'] = (communitycontainer.findAll('li')[3].contents[0].string[25:len(communitycontainer.findAll('li')[3].contents[0].string)-2],\
+                                                        communitycontainer.findAll('li')[3].find('a')['href'])
+            userInfo['community']['reqfilled'] = (communitycontainer.findAll('li')[4].contents[0].string[17:len(communitycontainer.findAll('li')[4].contents[0].string)-2],\
+                                                        communitycontainer.findAll('li')[4].find('a')['href'])
+            userInfo['community']['reqvoted'] = (communitycontainer.findAll('li')[5].contents[0].string[16:len(communitycontainer.findAll('li')[5].contents[0].string)-2],\
+                                                        communitycontainer.findAll('li')[5].find('a')['href'])
+            userInfo['community']['uploaded'] = (communitycontainer.findAll('li')[6].contents[0].string[10:len(communitycontainer.findAll('li')[6].contents[0].string)-2],\
+                                                        communitycontainer.findAll('li')[6].find('a')['href'])
+            userInfo['community']['uniquegroups'] = (communitycontainer.findAll('li')[7].contents[0].string[15:len(communitycontainer.findAll('li')[7].contents[0].string)-2],\
+                                                        communitycontainer.findAll('li')[7].find('a')['href'])
+            userInfo['community']['pefectflacs'] = (communitycontainer.findAll('li')[8].contents[0].string[16:len(communitycontainer.findAll('li')[8].contents[0].string)-2],\
+                                                        communitycontainer.findAll('li')[8].find('a')['href'])
+            userInfo['community']['seeding'] = (communitycontainer.findAll('li')[9].contents[0].string[9:len(communitycontainer.findAll('li')[9].contents[0].string)-2],\
+                                                        communitycontainer.findAll('li')[9].find('a')['href'])
+            userInfo['community']['leeching'] = (communitycontainer.findAll('li')[10].contents[0].string[10:len(communitycontainer.findAll('li')[10].contents[0].string)-2],\
+                                                        communitycontainer.findAll('li')[10].find('a')['href'])
             #NB: there's a carriage return and white spaces inside the snatched li tag
-            userInfo['community']['snatched'] = (soup.findAll('li')[27+i].contents[0].string[10:len(soup.findAll('li')[27+i].contents[0].string)-7],\
-                                                        soup.findAll('li')[27+i].find('a')['href'])
-            userInfo['community']['invited'] = (soup.findAll('li')[28+i].contents[0].string[9:],\
+            userInfo['community']['snatched'] = (communitycontainer.findAll('li')[11].contents[0].string[10:len(communitycontainer.findAll('li')[11].contents[0].string)-7],\
+                                                        communitycontainer.findAll('li')[11].find('a')['href'])
+            userInfo['community']['invited'] = (communitycontainer.findAll('li')[12].contents[0].string[9:],\
                                                         None)
-            userInfo['community']['artists'] = soup.findAll('li')[12]['title']
+            userInfo['community']['artists'] = percentilecontainer.findAll('li')[6]['title']
 
             return userInfo
 
-        def torrentInfo(self, dom, id):
+        def torrentInfo(self, dom, id, isparent):
             """
                 Parse a torrent's page and returns a dictionnary with its information
             """
+
             torrentInfo = {'torrent':{}}
             torrentfiles = []
             torrentdescription = ""
             isreported = False
             isfreeleech = False
             soup = BeautifulSoup(str(dom))
-            torrentInfo['torrent']['editioninfo'] = soup.findAll('td', {'class':'edition_info'})[0].find('strong').contents[-1]
-            regrlsmedia = re.compile('CD|DVD|Vinyl|Soundboard|SACD|Cassette|WEB|Blu-ray')
-            torrentInfo['torrent']['rlsmedia'] = regrlsmedia.search(torrentInfo['torrent']['editioninfo']).group(0)
-            groupidurl = soup.findAll('div', {'class':'linkbox'})[0].find('a')['href']
-            torrentInfo['torrent']['parentid'] = groupidurl[groupidurl.rfind("=")+1:]
-            torrentInfo['torrent']['downloadurl'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a',{'title':'Download'})[0]['href']
-            regrlstype = re.compile('Album|Soundtrack|EP|Anthology|Compilation|Single|Live album|Remix|Bootleg|Interview|Mixtape|Unknown')
-            torrentInfo['torrent']['rlstype'] = regrlstype.search(soup.find('div', {'class':'thin'}).find('h2').contents[1]).group(0)
+            if isparent:
+                torrentInfo['torrent']['parentid'] = id
+            else:
+                groupidurl = soup.findAll('div', {'class':'linkbox'})[0].find('a')['href']
+                torrentInfo['torrent']['editioninfo'] = soup.findAll('td', {'class':'edition_info'})[0].find('strong').contents[-1]
+                regrlsmedia = re.compile('CD|DVD|Vinyl|Soundboard|SACD|Cassette|WEB|Blu-ray')
+                torrentInfo['torrent']['rlsmedia'] = regrlsmedia.search(torrentInfo['torrent']['editioninfo']).group(0)
+                torrentInfo['torrent']['parentid'] = groupidurl[groupidurl.rfind("=")+1:]
+                torrentInfo['torrent']['downloadurl'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a',{'title':'Download'})[0]['href']
+                ## is freeleech or/and reported? ##
+                #both
+                if len(soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents) == 4:
+                    isreported = True
+                    isfreeleech = True
+                    torrentInfo['torrent']['details'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents[0]
+                #either
+                elif len(soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents) == 2:
+                    if soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents[1].string == 'Reported':
+                        isreported = True
+                    elif soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents[1].string == 'Freeleech!':
+                        isreported = True
+                    torrentInfo['torrent']['details'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents[0]
+                #none
+                else:
+                    torrentInfo['torrent']['details'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents[0]
+                torrentInfo['torrent']['isfreeleech'] = isfreeleech
+                torrentInfo['torrent']['isreported'] = isreported
+                torrentInfo['torrent']['size'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('td')[1].string
+                torrentInfo['torrent']['snatched'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('td')[2].string
+                torrentInfo['torrent']['seeders'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('td')[3].string
+                torrentInfo['torrent']['leechers'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('td')[4].string
+                torrentInfo['torrent']['uploadedby'] = soup.findAll('tr',{'id':'torrent_%s'%id})[0].findAll('a')[0].string
+                foldername = soup.findAll('div',{'id':'files_%s'%id})[0].findAll('div')[1].string
+                if(foldername is None):
+                    torrentInfo['torrent']['foldername'] = None
+                else:
+                    torrentInfo['torrent']['foldername'] = self.utils.decodeHTMLEntities(foldername)
+                files = soup.findAll('div',{'id':'files_%s'%id})[0].findAll('tr')
+                for file in files[1:-1]:
+                    torrentfiles.append(self.utils.decodeHTMLEntities(file.contents[0].string))
+                torrentInfo['torrent']['filelist'] = torrentfiles
+                #is there any description?
+                if len(soup.findAll('tr',{'id':'torrent_%s'%id})[0].findAll('blockquote')) > 1:
+                    description = torrentInfo['torrent']['description'] = soup.findAll('tr',{'id':'torrent_%s'%id})[0].findAll('blockquote')[1].contents
+                    info = ''
+                    for content in description:
+                        if content.string:
+                            info = "%s%s" % (info, self.utils._string(content.string))
+                            torrentdescription = "%s%s" % (torrentdescription, self.utils._string(content.string))
+                torrentInfo['torrent']['torrentdescription'] = torrentdescription
+                regrlstype = re.compile('Album|Soundtrack|EP|Anthology|Compilation|Single|Live album|Remix|Bootleg|Interview|Mixtape|Unknown')
+                torrentInfo['torrent']['rlstype'] = regrlstype.search(soup.find('div', {'class':'thin'}).find('h2').contents[1]).group(0)
 
-            ## is freeleech or/and reported? ##
-            
-            #both
-            if len(soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents) == 4:
-                isreported = True
-                isfreeleech = True
-                torrentInfo['torrent']['details'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents[0]
-            #either
-            elif len(soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents) == 2:
-                if soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents[1].string == 'Reported':
-                    isreported = True
-                elif soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents[1].string == 'Freeleech!':
-                    isreported = True
-                torrentInfo['torrent']['details'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents[0]
-            #none
-            else:
-                torrentInfo['torrent']['details'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('a')[-1].contents[0]
-            torrentInfo['torrent']['isfreeleech'] = isfreeleech
-            torrentInfo['torrent']['isreported'] = isreported
-            torrentInfo['torrent']['size'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('td')[1].string
-            torrentInfo['torrent']['snatched'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('td')[2].string
-            torrentInfo['torrent']['seeders'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('td')[3].string
-            torrentInfo['torrent']['leechers'] = soup.findAll('tr',{'id':'torrent%s'%id})[0].findAll('td')[4].string
-            torrentInfo['torrent']['uploadedby'] = soup.findAll('tr',{'id':'torrent_%s'%id})[0].findAll('a')[0].string
-            foldername = soup.findAll('div',{'id':'files_%s'%id})[0].findAll('div')[1].string
-            
-            if(foldername is None):
-                torrentInfo['torrent']['foldername'] = None
-            else:
-                torrentInfo['torrent']['foldername'] = self.utils.decodeHTMLEntities(foldername)
-            files = soup.findAll('div',{'id':'files_%s'%id})[0].findAll('tr')
-            for file in files[1:-1]:
-                torrentfiles.append(self.utils.decodeHTMLEntities(file.contents[0].string))
-            torrentInfo['torrent']['filelist'] = torrentfiles
-            #is there any description?
-            if len(soup.findAll('tr',{'id':'torrent_%s'%id})[0].findAll('blockquote')) > 1:
-                description = torrentInfo['torrent']['description'] = soup.findAll('tr',{'id':'torrent_%s'%id})[0].findAll('blockquote')[1].contents
-                info = ''
-                for content in description:
-                    if content.string:
-                        info = "%s%s" % (info, self.utils._string(content.string))
-                        torrentdescription = "%s%s" % (torrentdescription, self.utils._string(content.string))
-            torrentInfo['torrent']['torrentdescription'] = torrentdescription
+            torrentInfo['torrent']['comments'] = []
+            torrentInfo['torrent']['commentspages'] = 0
+
+            if len(soup.findAll('table', {'class':'forum_post box vertical_margin'})) > 0:
+                linkbox = dom.findAll("div", {"class": "linkbox"})[-1]
+                pages = 1
+                postid = ''
+                userid = ''
+                post = ''
+                # if there's more than 1 page of torrents
+                if linkbox.find("a"):
+                    # by default torrent page show last page of comments
+                    lastpage = linkbox.findAll("a")[-1]['href']
+                    pages = int(lastpage[18:lastpage.find('&')]) +1
+                for comment in soup.findAll('table', {'class':'forum_post box vertical_margin'}):
+                    postid = comment.find("a",{"class":"post_id"}).string[1:]
+                    userid = comment.findAll("a")[1]['href'][12:]
+                    username = comment.findAll("a")[1].string
+                    post = comment.find("div", {"id":"content"+postid})
+                    post = u''.join([post.string for post in post.findAll(text=True)])
+                    torrentInfo['torrent']['comments'].append({"postid":postid,"post":post,"userid":userid,"username":username})
+
+                torrentInfo['torrent']['commentspages'] = pages
 
             return torrentInfo
 
@@ -1199,7 +1294,7 @@ class Parser(object):
                 navsoup = dom.find("div", {"class": "linkbox"})
                 pages = 1
                 regyear = re.compile('\[\d{4}\]')
-                
+
                 #is there a page navigation bar?
                 if navsoup.contents:
                     #if there's more than 1 page of torrents
@@ -1217,7 +1312,7 @@ class Parser(object):
                         torrenttag = torrent.find('td').contents[1]['title']
                         torrentdl = torrent.findAll('td')[1].find('span').findAll('a')[0]['href']
                         torrentrm = torrent.findAll('td')[1].find('span').findAll('a')[1]['href']
-                        torrentid = torrentrm[torrentrm.rfind('=')+1:]                        
+                        torrentid = torrentrm[torrentrm.rfind('=')+1:]
                         torrenttd = torrent.findAll('td')[1]
 
                         # remove dataless elements
@@ -1270,6 +1365,43 @@ class Parser(object):
                                             'scene':isScene})
 
             return torrentslist
+
+        def postsList(self,dom):
+            """
+                Parse a post list page and returns a dictionnary with each post information:
+                {torrentid, commentid, postid}
+            """
+            postslist = []
+            postssoup = dom.find("div", {"class": "thin"})
+            pages = 0
+
+            #if there's at least 1 post in the list
+            if postssoup:
+                navsoup = dom.find("div", {"class": "linkbox"})
+
+                #if there's more than 1 page of torrents
+                if navsoup.find("a"):
+                    lastpage = navsoup.findAll("a")[1]['href']
+                    pages = lastpage[18:lastpage.find('&')]
+                    self.totalpages = pages
+                else: #we are at the last page, no link
+                    pages = 1
+
+                for post in postssoup.fetch('table', {'class':'forum_post box vertical_margin'}):
+                    commentbody = post.find("td", {"class":"body"})
+                    postid = post.find("span").findAll("a")[0].string[1:]
+                    torrentid = post.find("span").findAll("a")[-1]['href'][post.find("span").findAll("a")[-1]['href'].rfind('=')+1:]
+                    comment = u''.join([commentbody.string for commentbody in commentbody.findAll(text=True)])
+                    postdate = post.find("span", {"class":"time"})['title']
+                    postslist.append({'postid':postid,\
+                                        'torrentid':torrentid,\
+                                        'comment':comment,\
+                                        'postdate':postdate,\
+                                        'pages':pages})
+
+
+            return postslist
+
 
         def whatForm(self, dom, action):
             """
