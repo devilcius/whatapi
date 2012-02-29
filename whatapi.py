@@ -527,7 +527,7 @@ class User(WhatBase):
             - whatcd object: the what.cd network object
         """
         WhatBase.__init__(self, whatcd)
-        self.name = username
+        self.username = username
         self.whatcd = whatcd
         self.userpage = "/user.php?"
         self.userid = None
@@ -546,7 +546,7 @@ class User(WhatBase):
         if self.userid:
             return self.userid
         else:
-            idform = {'action': "search", 'search': self.name}
+            idform = {'action': "search", 'search': self.username}
             data = urllib.urlencode(idform)
             headers = self._request("GET", self.userpage + data, "", self.whatcd.headers).execute(True).headers
             if dict(headers) is None:
@@ -592,7 +592,7 @@ class User(WhatBase):
             form = {'id': self.getUserId()}
             data = urllib.urlencode(form)
             userpage = BeautifulSoup(self._request("GET", self.userpage + data, "", self.whatcd.headers).execute(True).body)
-            info = self._parser().userInfo(userpage.find("div", {"class": "sidebar"}), self.name)
+            info = self._parser().userInfo(userpage.find("div", {"class": "sidebar"}), self.username)
             self.userinfo = info
             return info
         else:
@@ -1193,7 +1193,7 @@ class Parser(object):
                             info = "%s%s" % (info, self.utils._string(content.string))
                             torrentdescription = "%s%s" % (torrentdescription, self.utils._string(content.string))
                 torrentInfo['torrent']['torrentdescription'] = torrentdescription
-                regrlstype = re.compile('Album|Soundtrack|EP|Anthology|Compilation|Single|Live album|Remix|Bootleg|Interview|Mixtape|Unknown')
+                regrlstype = re.compile('Album|Soundtrack|EP|Anthology|Compilation|DJ Mix|Single|Live album|Remix|Bootleg|Interview|Mixtape|Unknown')
                 torrentInfo['torrent']['rlstype'] = regrlstype.search(soup.find('div', {'class':'thin'}).find('h2').contents[1]).group(0)
 
             torrentInfo['torrent']['comments'] = []
@@ -1351,8 +1351,16 @@ class Parser(object):
                             torrentalbum = torrenttd.findAll("a")[2].string
                             info = torrenttd.findAll("a")[2].nextSibling.string.strip()
 
+                        elif torrenttd.find(text=re.compile('performed by')):
+                            #performed by
+                            torrentartist = (self.utils.decodeHTMLEntities(torrenttd.findAll("a")[-2].string),)
+                            artistid = (torrenttd.findAll("a")[-2]['href'][14:],)
+                            torrentalbum = torrenttd.findAll("a")[-1].string
+                            info = torrenttd.findAll("a")[-1].nextSibling.string.strip()
+
                         if 'Scene' in info:
                             isScene = True
+
                         torrentyear = regyear.search(info).group(0)[1:5]
                         torrentslist.append({'tag':torrenttag,\
                                             'dlurl':torrentdl,\
