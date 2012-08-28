@@ -327,7 +327,7 @@ def getWhatcdNetwork(username = "", password = ""):
     return WhatCD (
                     username = username,
                     password = password,
-                    site = "what.cd",
+                    site = "ssl.what.cd",
                     loginpage = "/login.php",
                     headers = {
                         "Content-type": "application/x-www-form-urlencoded",
@@ -390,12 +390,12 @@ class Request(object):
         """Returns a ResponseBody object from the server."""
 
         #print "downloading from %s" % (self.path)
-        conn = httplib.HTTPConnection(self.whatcd.site)
+        conn = httplib.HTTPSConnection(self.whatcd.site)
         rb = ResponseBody()
 
         if self.whatcd.isProxyEnabled():
-            conn = httplib.HTTPConnection(host = self.whatcd.getProxy()[0], port = self.whatcd.getProxy()[1])
-            conn.request(method = self.type, url="http://" + self.whatcd.site + self.path, body = self.data, headers = self.headers)
+            conn = httplib.HTTPSConnection(host = self.whatcd.getProxy()[0], port = self.whatcd.getProxy()[1])
+            conn.request(method = self.type, url="https://" + self.whatcd.site + self.path, body = self.data, headers = self.headers)
         else:
             conn.request(self.type, self.path, self.data, self.headers)
 
@@ -444,6 +444,7 @@ class Authenticate(WhatBase):
             print "Login failed, most likely bad creds or the site is down, nothing to do"
             os.remove('cookie')
             self.whatcd.headers = None
+            quit()
         f.close()
 
 
@@ -527,7 +528,7 @@ class User(WhatBase):
             - whatcd object: the what.cd network object
         """
         WhatBase.__init__(self, whatcd)
-        self.username = username
+        self.name = username
         self.whatcd = whatcd
         self.userpage = "/user.php?"
         self.userid = None
@@ -546,7 +547,7 @@ class User(WhatBase):
         if self.userid:
             return self.userid
         else:
-            idform = {'action': "search", 'search': self.username}
+            idform = {'action': "search", 'search': self.name}
             data = urllib.urlencode(idform)
             headers = self._request("GET", self.userpage + data, "", self.whatcd.headers).execute(True).headers
             if dict(headers) is None:
@@ -592,7 +593,7 @@ class User(WhatBase):
             form = {'id': self.getUserId()}
             data = urllib.urlencode(form)
             userpage = BeautifulSoup(self._request("GET", self.userpage + data, "", self.whatcd.headers).execute(True).body)
-            info = self._parser().userInfo(userpage.find("div", {"class": "sidebar"}), self.username)
+            info = self._parser().userInfo(userpage.find("div", {"class": "sidebar"}), self.name)
             self.userinfo = info
             return info
         else:
@@ -1435,4 +1436,3 @@ class Parser(object):
 
 if __name__ == "__main__":
 	print "Module to manage what.cd as a web service"
-
