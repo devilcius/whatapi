@@ -441,10 +441,11 @@ class Authenticate(WhatBase):
             homepage = response.body
             pickle.dump(self.whatcd.headers, f)
         except (KeyError, AttributeError):
-            print "Login failed, most likely bad creds or the site is down, nothing to do"
-            os.remove('cookie')
-            self.whatcd.headers = None
-            quit()
+			print "Login failed, most likely bad creds or the site is down, nothing to do"
+			f.close()
+			os.remove('cookie')
+			self.whatcd.headers = None
+			quit()
         f.close()
 
 
@@ -458,9 +459,10 @@ class Authenticate(WhatBase):
             try:
                 self.whatcd.headers = pickle.load(f)
             except EOFError:
-                os.remove("cookie")
-                print "invalid cookie, removed"
-                self.setCookie()
+				f.close()
+				os.remove("cookie")
+				print "invalid cookie, removed"
+				self.setCookie()
         else:
             self.setCookie()
         #set authenticated user info
@@ -738,34 +740,42 @@ class Torrent(WhatBase):
 
 
     def getTorrentUrl(self):
-        """
-            Returns a dictionnary torrent's real URL
-        """
-        if self.isParent:
-            form = {'id': self.id, 'page':self.page}
-            data = urllib.urlencode(form)
-            return self.torrentpage + data
-        else:
-            form = {'torrentid': self.id, 'page':self.page}
-        data = urllib.urlencode(form)
-        headers = self._request("GET", self.torrentpage + data, "", self.whatcd.headers).execute(True).headers
-        if dict(headers) is None:
-            return None
-        else:
-            return dict(headers)['location']
+		"""
+			Returns torrent's URL
+		"""
+		if self.isParent:
+			form = {'id': self.id, 'page':self.page}
+			data = urllib.urlencode(form)
+			return self.torrentpage + data
+		else:
+			form = {'torrentid': self.id, 'page':self.page}
+		data = urllib.urlencode(form)
+		headers = self._request("GET", self.torrentpage + data, "", self.whatcd.headers).execute(True).headers
+
+		if dict(headers) is None:
+			return None
+		else:
+			if 'location' not in dict(headers).keys():
+				return None
+			else:
+				return dict(headers)['location']
 
 
     def getInfo(self):
-        """
-            Returns a dictionnary with torrents's info
-        """
-        torrentpage = BeautifulSoup(self._request("GET", "/"+self.getTorrentUrl(), "", self.whatcd.headers).execute(True).body)
+		"""
+			Returns a dictionnary with torrents's info
+		"""
+		if self.getTorrentUrl() is None:
+			print "no torrent retrieved with such id"
+			return None
+			
+		torrentpage = BeautifulSoup(self._request("GET", "/"+self.getTorrentUrl(), "", self.whatcd.headers).execute(True).body)
 
-        if 'Site log' in torrentpage.find("title").string:
-            print "no torrent retrieved with such id"
-            return None
-        else:
-            return self._parser().torrentInfo(torrentpage, self.id, self.isParent)
+		if 'Site log' in torrentpage.find("title").string:
+			print "no torrent retrieved with such id"
+			return None
+		else:
+			return self._parser().torrentInfo(torrentpage, self.id, self.isParent)
 
 
     def getTorrentParentId(self):
@@ -1436,3 +1446,4 @@ class Parser(object):
 
 if __name__ == "__main__":
 	print "Module to manage what.cd as a web service"
+
