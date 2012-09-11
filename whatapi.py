@@ -768,7 +768,7 @@ class Torrent(WhatBase):
         if self.getTorrentUrl() is None:
             print "no torrent retrieved with such id"
             return None
-			
+
         torrentpage = BeautifulSoup(self._request("GET", "/" + self.getTorrentUrl(), "", self.whatcd.headers).execute(True).body)
 
         if 'Site log' in torrentpage.find("title").string:
@@ -1434,17 +1434,15 @@ class Parser(object):
         form = dom.find('input', {'name':'action', 'value':action}).parent
         elements = form.fetch(('input', 'textarea'))
         #get all form elements except for submit input
-        for element in elements[0:-1]:
+        for element in elements[0:3]:
             name = element.get('name', None)
             if element.name == 'textarea':
                 inputs[name] = element.string
             else:
                 inputs[name] = element.get('value', None)
-            return inputs
+        return inputs
 
 
 
 if __name__ == "__main__":
     print "Module to manage what.cd as a web service"
-
-
