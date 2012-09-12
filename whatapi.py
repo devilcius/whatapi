@@ -1244,7 +1244,7 @@ class Parser(object):
         tagsartist = []
         similarartists = []
         soup = BeautifulSoup(str(dom))
-        for releasetype in soup.fetch('table', {'class':'torrent_table'}):
+        for releasetype in soup.fetch('table', {'class': re.compile(r'\btorrent_table\b')}):
             releasetypenames = releasetype.findAll('strong')
             releasetypename = releasetype.findAll('strong')[0].string
             for release in releasetypenames[1:-1]:
@@ -1340,15 +1340,15 @@ class Parser(object):
 
                     if len(torrenttd.findAll('a')) == 2:
                         #one artist
-                        torrentartist = (self.utils.decodeHTMLEntities(torrenttd.find("a").string),)
-                        artistid = (torrenttd.find("a")['href'][14:],)
+                        torrentartist = (self.utils.decodeHTMLEntities(torrenttd.find("a").string), )
+                        artistid = (torrenttd.find("a")['href'][14:], )
                         torrentalbum = torrenttd.findAll("a")[1].string
                         info = torrenttd.findAll("a")[1].nextSibling.string.strip()
 
 
                     elif len(torrenttd.findAll('a')) == 1:
                         #various artists
-                        torrentartist = ('Various Artists',)
+                        torrentartist = ('Various Artists', )
                         artistid = ()
                         torrentalbum = torrenttd.find("a").string
                         info = torrenttd.find("a").nextSibling.string.strip()
@@ -1364,8 +1364,8 @@ class Parser(object):
 
                     elif torrenttd.find(text=re.compile('performed by')):
                         #performed by
-                        torrentartist = (self.utils.decodeHTMLEntities(torrenttd.findAll("a")[-2].string),)
-                        artistid = (torrenttd.findAll("a")[-2]['href'][14:],)
+                        torrentartist = (self.utils.decodeHTMLEntities(torrenttd.findAll("a")[-2].string), )
+                        artistid = (torrenttd.findAll("a")[-2]['href'][14:], )
                         torrentalbum = torrenttd.findAll("a")[-1].string
                         info = torrenttd.findAll("a")[-1].nextSibling.string.strip()
 
