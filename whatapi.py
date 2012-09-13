@@ -441,11 +441,10 @@ class Authenticate(WhatBase):
             homepage = response.body
             pickle.dump(self.whatcd.headers, f)
         except (KeyError, AttributeError):
-            print "Login failed, most likely bad creds or the site is down, nothing to do"
             f.close()
             os.remove('cookie')
             self.whatcd.headers = None
-            quit()
+            raise Exception("Login failed, most likely bad creds or the site is down, nothing to do")
         f.close()
 
 
