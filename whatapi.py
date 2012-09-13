@@ -1055,9 +1055,10 @@ class Parser(object):
         userInfo = {}
         soup = BeautifulSoup(str(dom))
         for ul in soup.fetch('ul'):
+            ul_all_li = ul.findAll('li')
             if ul["id"] == "userinfo_username":
                 #retrieve user logged id
-                hrefid = ul.findAll('li')[0].find("a")["href"]
+                hrefid = ul_all_li[0].find("a")["href"]
                 regid = re.compile('[0-9]+')
                 if regid.search(hrefid) is None:
                     self.debugMessage("not found  href to retrieve user id")
@@ -1065,7 +1066,7 @@ class Parser(object):
                     userInfo["id"] = regid.search(hrefid).group(0)
 
                 #retrieve user logged id
-                hrefauth = ul.findAll('li')[2].find("a")["href"]
+                hrefauth = ul_all_li[2].find("a")["href"]
                 regauth = re.compile('=[0-9a-zA-Z]+')
                 if regid.search(hrefid) is None:
                     self.debugMessage("not found  href to retrieve user id")
@@ -1073,11 +1074,11 @@ class Parser(object):
                     userInfo["authcode"] = regauth.search(hrefauth).group(0)[1:]
 
             elif ul["id"] == "userinfo_stats":
-                if len(ul.findAll('li')) > 0:
-                    userInfo["uploaded"] = ul.findAll('li')[0].find("span").string
-                    userInfo["downloaded"] = ul.findAll('li')[1].find("span").string
-                    userInfo["ratio"] = ul.findAll('li')[2].findAll("span")[1].string
-                    userInfo["required"] = ul.findAll('li')[3].find("span").string
+                if len(ul_all_li) > 0:
+                    userInfo["uploaded"] = ul_all_li[0].find("span").string
+                    userInfo["downloaded"] = ul_all_li[1].find("span").string
+                    userInfo["ratio"] = ul_all_li[2].findAll("span")[1].string
+                    userInfo["required"] = ul_all_li[3].find("span").string
                     userInfo["authenticate"] = True
 
         return userInfo
@@ -1100,54 +1101,58 @@ class Parser(object):
                 if div.find('ul').findAll('li')[1].contents[1].string.strip() != "Off":
                     return None
 
-        statscontainer = soup.findAll('div', {'class':'box'})[1]
-        percentilecontainer = soup.findAll('div', {'class':'box'})[2]
-        communitycontainer = soup.findAll('div', {'class':'box'})[4]
+        all_div_box = soup.findAll('div', {'class': 'box'})
+        statscontainer = all_div_box[1]
+        percentilecontainer = all_div_box[2]
+        communitycontainer = all_div_box[4]
 
+        statscontainer_all_li = statscontainer.findAll('li')
+        userInfo['stats']['joined'] = statscontainer_all_li[0].find('span')['title']
+        userInfo['stats']['lastseen'] = statscontainer_all_li[1].find('span')['title']
+        userInfo['stats']['uploaded'] = statscontainer_all_li[2].string[10:]
+        userInfo['stats']['downloaded'] = statscontainer_all_li[3].string[12:]
+        userInfo['stats']['ratio'] = statscontainer_all_li[4].find('span').string
+        userInfo['stats']['rratio'] = statscontainer_all_li[5].string[16:]
 
-        userInfo['stats']['joined'] = statscontainer.findAll('li')[0].find('span')['title']
-        userInfo['stats']['lastseen'] = statscontainer.findAll('li')[1].find('span')['title']
-        userInfo['stats']['uploaded'] = statscontainer.findAll('li')[2].string[10:]
-        userInfo['stats']['downloaded'] = statscontainer.findAll('li')[3].string[12:]
-        userInfo['stats']['ratio'] = statscontainer.findAll('li')[4].find('span').string
-        userInfo['stats']['rratio'] = statscontainer.findAll('li')[5].string[16:]
-        userInfo['percentile']['dataup'] = percentilecontainer.findAll('li')[0].string[15:]
-        userInfo['percentile']['datadown'] = percentilecontainer.findAll('li')[1].string[17:]
-        userInfo['percentile']['torrentsup'] = percentilecontainer.findAll('li')[2].string[19:]
-        userInfo['percentile']['reqfilled'] = percentilecontainer.findAll('li')[3].string[17:]
-        userInfo['percentile']['bountyspent'] = percentilecontainer.findAll('li')[4].string[14:]
-        userInfo['percentile']['postsmade'] = percentilecontainer.findAll('li')[5].string[12:]
-        userInfo['percentile']['artistsadded'] = percentilecontainer.findAll('li')[6].string[15:]
-        userInfo['percentile']['overall'] = percentilecontainer.findAll('li')[7].find('strong').string[14:]
+        percentilecontainer_all_li = percentilecontainer.findAll('li')
+        userInfo['percentile']['dataup'] = percentilecontainer_all_li[0].string[15:]
+        userInfo['percentile']['datadown'] = percentilecontainer_all_li[1].string[17:]
+        userInfo['percentile']['torrentsup'] = percentilecontainer_all_li[2].string[19:]
+        userInfo['percentile']['reqfilled'] = percentilecontainer_all_li[3].string[17:]
+        userInfo['percentile']['bountyspent'] = percentilecontainer_all_li[4].string[14:]
+        userInfo['percentile']['postsmade'] = percentilecontainer_all_li[5].string[12:]
+        userInfo['percentile']['artistsadded'] = percentilecontainer_all_li[6].string[15:]
+        userInfo['percentile']['overall'] = percentilecontainer_all_li[7].find('strong').string[14:]
 
-        userInfo['community']['forumposts'] = (communitycontainer.findAll('li')[0].contents[0].string[13:len(communitycontainer.findAll('li')[0].contents[0].string)-2], \
-                                               communitycontainer.findAll('li')[0].find('a')['href'])
-        userInfo['community']['torrentscomments'] = (communitycontainer.findAll('li')[1].contents[0].string[18:len(communitycontainer.findAll('li')[1].contents[0].string)-2], \
-                                                     communitycontainer.findAll('li')[1].find('a')['href'])
-        userInfo['community']['startedcollages'] = (communitycontainer.findAll('li')[2].contents[0].string[18:len(communitycontainer.findAll('li')[2].contents[0].string)-2], \
-                                                    communitycontainer.findAll('li')[2].find('a')['href'])
-        userInfo['community']['contributedcollages'] = (communitycontainer.findAll('li')[3].contents[0].string[25:len(communitycontainer.findAll('li')[3].contents[0].string)-2], \
-                                                        communitycontainer.findAll('li')[3].find('a')['href'])
-        userInfo['community']['reqfilled'] = (communitycontainer.findAll('li')[4].contents[0].string[17:len(communitycontainer.findAll('li')[4].contents[0].string)-2], \
-                                              communitycontainer.findAll('li')[4].find('a')['href'])
-        userInfo['community']['reqvoted'] = (communitycontainer.findAll('li')[5].contents[0].string[16:len(communitycontainer.findAll('li')[5].contents[0].string)-2], \
-                                             communitycontainer.findAll('li')[5].find('a')['href'])
-        userInfo['community']['uploaded'] = (communitycontainer.findAll('li')[6].contents[0].string[10:len(communitycontainer.findAll('li')[6].contents[0].string)-2], \
-                                             communitycontainer.findAll('li')[6].find('a')['href'])
-        userInfo['community']['uniquegroups'] = (communitycontainer.findAll('li')[7].contents[0].string[15:len(communitycontainer.findAll('li')[7].contents[0].string)-2], \
-                                                 communitycontainer.findAll('li')[7].find('a')['href'])
-        userInfo['community']['pefectflacs'] = (communitycontainer.findAll('li')[8].contents[0].string[16:len(communitycontainer.findAll('li')[8].contents[0].string)-2], \
-                                                communitycontainer.findAll('li')[8].find('a')['href'])
-        userInfo['community']['seeding'] = (communitycontainer.findAll('li')[9].contents[0].string[9:len(communitycontainer.findAll('li')[9].contents[0].string)-2], \
-                                            communitycontainer.findAll('li')[9].find('a')['href'])
-        userInfo['community']['leeching'] = (communitycontainer.findAll('li')[10].contents[0].string[10:len(communitycontainer.findAll('li')[10].contents[0].string)-2], \
-                                             communitycontainer.findAll('li')[10].find('a')['href'])
+        communitycontainer_all_li = communitycontainer.findAll('li')
+        userInfo['community']['forumposts'] = (communitycontainer_all_li[0].contents[0].string[13:len(communitycontainer_all_li[0].contents[0].string)-2], \
+                                               communitycontainer_all_li[0].find('a')['href'])
+        userInfo['community']['torrentscomments'] = (communitycontainer_all_li[1].contents[0].string[18:len(communitycontainer_all_li[1].contents[0].string)-2], \
+                                                     communitycontainer_all_li[1].find('a')['href'])
+        userInfo['community']['startedcollages'] = (communitycontainer_all_li[2].contents[0].string[18:len(communitycontainer_all_li[2].contents[0].string)-2], \
+                                                    communitycontainer_all_li[2].find('a')['href'])
+        userInfo['community']['contributedcollages'] = (communitycontainer_all_li[3].contents[0].string[25:len(communitycontainer_all_li[3].contents[0].string)-2], \
+                                                        communitycontainer_all_li[3].find('a')['href'])
+        userInfo['community']['reqfilled'] = (communitycontainer_all_li[4].contents[0].string[17:len(communitycontainer_all_li[4].contents[0].string)-2], \
+                                              communitycontainer_all_li[4].find('a')['href'])
+        userInfo['community']['reqvoted'] = (communitycontainer_all_li[5].contents[0].string[16:len(communitycontainer_all_li[5].contents[0].string)-2], \
+                                             communitycontainer_all_li[5].find('a')['href'])
+        userInfo['community']['uploaded'] = (communitycontainer_all_li[6].contents[0].string[10:len(communitycontainer_all_li[6].contents[0].string)-2], \
+                                             communitycontainer_all_li[6].find('a')['href'])
+        userInfo['community']['uniquegroups'] = (communitycontainer_all_li[7].contents[0].string[15:len(communitycontainer_all_li[7].contents[0].string)-2], \
+                                                 communitycontainer_all_li[7].find('a')['href'])
+        userInfo['community']['pefectflacs'] = (communitycontainer_all_li[8].contents[0].string[16:len(communitycontainer_all_li[8].contents[0].string)-2], \
+                                                communitycontainer_all_li[8].find('a')['href'])
+        userInfo['community']['seeding'] = (communitycontainer_all_li[9].contents[0].string[9:len(communitycontainer_all_li[9].contents[0].string)-2], \
+                                            communitycontainer_all_li[9].find('a')['href'])
+        userInfo['community']['leeching'] = (communitycontainer_all_li[10].contents[0].string[10:len(communitycontainer_all_li[10].contents[0].string)-2], \
+                                             communitycontainer_all_li[10].find('a')['href'])
         #NB: there's a carriage return and white spaces inside the snatched li tag
-        userInfo['community']['snatched'] = (communitycontainer.findAll('li')[11].contents[0].string[10:len(communitycontainer.findAll('li')[11].contents[0].string)-7], \
-                                             communitycontainer.findAll('li')[11].find('a')['href'])
-        userInfo['community']['invited'] = (communitycontainer.findAll('li')[12].contents[0].string[9:], \
+        userInfo['community']['snatched'] = (communitycontainer_all_li[11].contents[0].string[10:len(communitycontainer_all_li[11].contents[0].string)-7], \
+                                             communitycontainer_all_li[11].find('a')['href'])
+        userInfo['community']['invited'] = (communitycontainer_all_li[12].contents[0].string[9:], \
                                             None)
-        userInfo['community']['artists'] = percentilecontainer.findAll('li')[6]['title']
+        userInfo['community']['artists'] = percentilecontainer_all_li[6]['title']
 
         return userInfo
 
@@ -1175,30 +1180,38 @@ class Parser(object):
             regrlsmedia = re.compile('CD|DVD|Vinyl|Soundboard|SACD|Cassette|WEB|Blu-ray')
             torrentInfo['torrent']['rlsmedia'] = regrlsmedia.search(torrentInfo['torrent']['editioninfo']).group(0)
             torrentInfo['torrent']['parentid'] = groupidurl[groupidurl.rfind("=") + 1:]
-            torrentInfo['torrent']['downloadurl'] = soup.findAll('tr', {'id':'torrent%s' % id})[0].findAll('a', {'title':'Download'})[0]['href']
+
+            all_tr_id_torrent = soup.findAll('tr', {'id': 'torrent%s' % id})
+            all_torrent_a = all_tr_id_torrent[0].findAll('a')
+
+            torrentInfo['torrent']['downloadurl'] = all_tr_id_torrent[0].findAll('a', {'title':'Download'})[0]['href']
             ## is freeleech or/and reported? ##
             #both
-            if len(soup.findAll('tr', {'id':'torrent%s' % id})[0].findAll('a')[-1].contents) == 4:
+            if len(all_torrent_a[-1].contents) == 4:
                 isreported = True
                 isfreeleech = True
-                torrentInfo['torrent']['details'] = soup.findAll('tr', {'id':'torrent%s' % id})[0].findAll('a')[-1].contents[0]
+                torrentInfo['torrent']['details'] = all_torrent_a[-1].contents[0]
             #either
-            elif len(soup.findAll('tr', {'id':'torrent%s' % id})[0].findAll('a')[-1].contents) == 2:
-                if soup.findAll('tr', {'id':'torrent%s' % id})[0].findAll('a')[-1].contents[1].string == 'Reported':
+            elif len(all_torrent_a[-1].contents) == 2:
+                if all_torrent_a[-1].contents[1].string == 'Reported':
                     isreported = True
-                elif soup.findAll('tr', {'id':'torrent%s' % id})[0].findAll('a')[-1].contents[1].string == 'Freeleech!':
+                elif all_torrent_a[-1].contents[1].string == 'Freeleech!':
                     isreported = True
-                torrentInfo['torrent']['details'] = soup.findAll('tr', {'id':'torrent%s' % id})[0].findAll('a')[-1].contents[0]
+                torrentInfo['torrent']['details'] = all_torrent_a[-1].contents[0]
             #none
             else:
-                torrentInfo['torrent']['details'] = soup.findAll('tr', {'id':'torrent%s' % id})[0].findAll('a')[-1].contents[0]
+                torrentInfo['torrent']['details'] = all_torrent_a[-1].contents[0]
             torrentInfo['torrent']['isfreeleech'] = isfreeleech
             torrentInfo['torrent']['isreported'] = isreported
-            torrentInfo['torrent']['size'] = soup.findAll('tr', {'id':'torrent%s' % id})[0].findAll('td')[1].string
-            torrentInfo['torrent']['snatched'] = soup.findAll('tr', {'id':'torrent%s' % id})[0].findAll('td')[2].string
-            torrentInfo['torrent']['seeders'] = soup.findAll('tr', {'id':'torrent%s' % id})[0].findAll('td')[3].string
-            torrentInfo['torrent']['leechers'] = soup.findAll('tr', {'id':'torrent%s' % id})[0].findAll('td')[4].string
-            torrentInfo['torrent']['uploadedby'] = soup.findAll('tr', {'id':'torrent_%s' % id})[0].findAll('a')[0].string
+
+            all_torrent_td = all_tr_id_torrent[0].findAll('td')
+            torrentInfo['torrent']['size'] = all_torrent_td[1].string
+            torrentInfo['torrent']['snatched'] = all_torrent_td[2].string
+            torrentInfo['torrent']['seeders'] = all_torrent_td[3].string
+            torrentInfo['torrent']['leechers'] = all_torrent_td[4].string
+
+            all_tr_id_torrent_underscore = soup.findAll('tr', {'id': 'torrent_%s' % id})
+            torrentInfo['torrent']['uploadedby'] = all_tr_id_torrent_underscore[0].findAll('a')[0].string
             foldername = soup.findAll('div', {'id':'files_%s' % id})[0].findAll('div')[1].string
             if(foldername is None):
                 torrentInfo['torrent']['foldername'] = None
@@ -1209,8 +1222,9 @@ class Parser(object):
                 torrentfiles.append(self.utils.decodeHTMLEntities(file.contents[0].string))
             torrentInfo['torrent']['filelist'] = torrentfiles
             #is there any description?
-            if len(soup.findAll('tr', {'id':'torrent_%s' % id})[0].findAll('blockquote')) > 1:
-                description = torrentInfo['torrent']['description'] = soup.findAll('tr', {'id':'torrent_%s' % id})[0].findAll('blockquote')[1].contents
+            all_torrent_blockquote = all_tr_id_torrent_underscore[0].findAll('blockquote')
+            if len(all_torrent_blockquote) > 1:
+                description = torrentInfo['torrent']['description'] = all_torrent_blockquote[1].contents
                 info = ''
                 for content in description:
                     if content.string:
@@ -1236,8 +1250,10 @@ class Parser(object):
                 pages = int(lastpage[18:lastpage.find('&')]) + 1
             for comment in soup.findAll('table', {'class':'forum_post box vertical_margin'}):
                 postid = comment.find("a", {"class":"post_id"}).string[1:]
-                userid = comment.findAll("a")[1]['href'][12:]
-                username = comment.findAll("a")[1].string
+
+                all_comment_a = comment.findAll("a")
+                userid = all_comment_a[1]['href'][12:]
+                username = all_comment_a[1].string
                 post = comment.find("div", {"id":"content" + postid})
                 post = u''.join([post.string for post in post.findAll(text=True)])
                 torrentInfo['torrent']['comments'].append({"postid":postid, "post":post, "userid":userid, "username":username})
@@ -1259,7 +1275,7 @@ class Parser(object):
         soup = BeautifulSoup(str(dom))
         for releasetype in soup.fetch('table', {'class': re.compile(r'\btorrent_table\b')}):
             releasetypenames = releasetype.findAll('strong')
-            releasetypename = releasetype.findAll('strong')[0].string
+            releasetypename = releasetypenames[0].string
             for release in releasetypenames[1:-1]:
                 #skip release edition info and Freeleech! <strong>s
                 if len(release.parent.contents) > 1 and len(release.contents) > 1:
@@ -1283,15 +1299,17 @@ class Parser(object):
                     infoartist = "%s%s" % (infoartist, self.utils._string(content.string))
         artistInfo['info'] = self.utils.decodeHTMLEntities(infoartist)
         #is there any artist tags?
-        if soup.findAll('ul', {'class':'stats nobullet'})[0].findAll('li'):
-            ul = soup.findAll('ul', {'class':'stats nobullet'})[0].findAll('li')
+        all_ul_class_stats_nobullet = soup.findAll('ul', {'class': 'stats nobullet'})
+        all_ul_class_stats_nobullet_li = all_ul_class_stats_nobullet[0].findAll('li')
+        if all_ul_class_stats_nobullet_li:
+            ul = all_ul_class_stats_nobullet_li
             for li in ul:
                 if li.contents[0].string:
                     tagsartist.append(self.utils._string(li.contents[0].string))
         artistInfo['tags'] = tagsartist
         #is there any similar artist?
-        if soup.findAll('ul', {'class':'stats nobullet'})[2].findAll('span', {'title':'2'}):
-            artists = soup.findAll('ul', {'class':'stats nobullet'})[2].findAll('span', {'title':'2'})
+        if all_ul_class_stats_nobullet[2].findAll('span', {'title':'2'}):
+            artists = all_ul_class_stats_nobullet[2].findAll('span', {'title':'2'})
             for artist in artists:
                 if artist.contents[0].string:
                     similarartists.append(self.utils._string(artist.contents[0].string))
@@ -1334,8 +1352,9 @@ class Parser(object):
                 if torrent.find('td').find('div')['class'][0:10] == 'cats_music':
 
                     torrenttag = torrent.find('td').contents[1]['title']
-                    torrentdl = torrent.findAll('td')[1].find('span').findAll('a')[0]['href']
-                    torrentrm = torrent.findAll('td')[1].find('span').findAll('a')[1]['href']
+                    all_td_1_span_a = torrent.findAll('td')[1].find('span').findAll('a')
+                    torrentdl = all_td_1_span_a[0]['href']
+                    torrentrm = all_td_1_span_a[1]['href']
                     torrentid = torrentrm[torrentrm.rfind('=') + 1:]
                     torrenttd = torrent.findAll('td')[1]
 
@@ -1351,36 +1370,38 @@ class Parser(object):
                     isScene = False
                     info = ""
 
-                    if len(torrenttd.findAll('a')) == 2:
+                    torrenttd_find_a = torrenttd.find("a")
+                    torrenttd_all_a = torrenttd.findAll("a")
+                    if len(torrenttd_all_a) == 2:
                         #one artist
-                        torrentartist = (self.utils.decodeHTMLEntities(torrenttd.find("a").string), )
-                        artistid = (torrenttd.find("a")['href'][14:], )
-                        torrentalbum = torrenttd.findAll("a")[1].string
-                        info = torrenttd.findAll("a")[1].nextSibling.string.strip()
+                        torrentartist = (self.utils.decodeHTMLEntities(torrenttd_find_a.string), )
+                        artistid = (torrenttd_find_a['href'][14:], )
+                        torrentalbum = torrenttd_all_a[1].string
+                        info = torrenttd_all_a[1].nextSibling.string.strip()
 
 
-                    elif len(torrenttd.findAll('a')) == 1:
+                    elif len(torrenttd_all_a) == 1:
                         #various artists
                         torrentartist = ('Various Artists', )
                         artistid = ()
-                        torrentalbum = torrenttd.find("a").string
-                        info = torrenttd.find("a").nextSibling.string.strip()
+                        torrentalbum = torrenttd_find_a.string
+                        info = torrenttd_find_a.nextSibling.string.strip()
 
-                    elif len(torrenttd.findAll('a')) == 3:
+                    elif len(torrenttd_all_a) == 3:
                         #two artists
-                        torrentartist = (self.utils.decodeHTMLEntities(torrenttd.findAll("a")[0].string), \
-                                         self.utils.decodeHTMLEntities(torrenttd.findAll("a")[1].string))
-                        artistid = (torrenttd.findAll("a")[0]['href'][14:], \
-                                    torrenttd.findAll("a")[1]['href'][14:])
-                        torrentalbum = torrenttd.findAll("a")[2].string
-                        info = torrenttd.findAll("a")[2].nextSibling.string.strip()
+                        torrentartist = (self.utils.decodeHTMLEntities(torrenttd_all_a[0].string), \
+                                         self.utils.decodeHTMLEntities(torrenttd_all_a[1].string))
+                        artistid = (torrenttd_all_a[0]['href'][14:], \
+                                    torrenttd_all_a[1]['href'][14:])
+                        torrentalbum = torrenttd_all_a[2].string
+                        info = torrenttd_all_a[2].nextSibling.string.strip()
 
                     elif torrenttd.find(text=re.compile('performed by')):
                         #performed by
-                        torrentartist = (self.utils.decodeHTMLEntities(torrenttd.findAll("a")[-2].string), )
-                        artistid = (torrenttd.findAll("a")[-2]['href'][14:], )
-                        torrentalbum = torrenttd.findAll("a")[-1].string
-                        info = torrenttd.findAll("a")[-1].nextSibling.string.strip()
+                        torrentartist = (self.utils.decodeHTMLEntities(torrenttd_all_a[-2].string), )
+                        artistid = (torrenttd_all_a[-2]['href'][14:], )
+                        torrentalbum = torrenttd_all_a[-1].string
+                        info = torrenttd_all_a[-1].nextSibling.string.strip()
 
                     if 'Scene' in info:
                         isScene = True
