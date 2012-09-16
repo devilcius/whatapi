@@ -26,7 +26,7 @@ __date__ = "$Oct 23, 2010 11:21:12 PM$"
 
 import hashlib
 try:
-    from BeautifulSoup import BeautifulSoup
+    from BeautifulSoup import BeautifulSoup, SoupStrainer
 except:
     raise ImportError, "Please install BeautifulSoup 3.2 module from http://www.crummy.com/software/BeautifulSoup/#Download"
 import httplib
@@ -36,6 +36,7 @@ import re
 import urllib
 import shelve
 import tempfile
+import threading
 from htmlentitydefs import name2codepoint as n2cp
 
 
@@ -339,17 +340,22 @@ def getWhatcdNetwork(username="", password=""):
 
 class _ShelfCacheBackend(object):
     """Used as a backend for caching cacheable requests."""
+    cache_lock = threading.Lock()
+
     def __init__(self, file_path=None):
         self.shelf = shelve.open(file_path)
 
     def getHTML(self, key):
-        return self.shelf[key]
+        with _ShelfCacheBackend.cache_lock:
+            return self.shelf[key]
 
     def setHTML(self, key, xml_string):
-        self.shelf[key] = xml_string
+        with _ShelfCacheBackend.cache_lock:
+            self.shelf[key] = xml_string
 
     def hasKey(self, key):
-        return key in self.shelf.keys()
+        with _ShelfCacheBackend.cache_lock:
+            return key in self.shelf.keys()
 
 
 class Request(object):
@@ -1237,28 +1243,29 @@ class Parser(object):
         torrentInfo['torrent']['comments'] = []
         torrentInfo['torrent']['commentspages'] = 0
 
-        if len(soup.findAll('table', {'class':'forum_post box vertical_margin'})) > 0:
-            linkbox = dom.findAll("div", {"class": "linkbox"})[-1]
-            pages = 1
-            postid = ''
-            userid = ''
-            post = ''
-            # if there's more than 1 page of torrents
-            if linkbox.find("a"):
-                # by default torrent page show last page of comments
-                lastpage = linkbox.findAll("a")[-1]['href']
-                pages = int(lastpage[18:lastpage.find('&')]) + 1
-            for comment in soup.findAll('table', {'class':'forum_post box vertical_margin'}):
-                postid = comment.find("a", {"class":"post_id"}).string[1:]
-
-                all_comment_a = comment.findAll("a")
-                userid = all_comment_a[1]['href'][12:]
-                username = all_comment_a[1].string
-                post = comment.find("div", {"id":"content" + postid})
-                post = u''.join([post.string for post in post.findAll(text=True)])
-                torrentInfo['torrent']['comments'].append({"postid":postid, "post":post, "userid":userid, "username":username})
-
-            torrentInfo['torrent']['commentspages'] = pages
+#        if len(soup.findAll('table', {'class':'forum_post box vertical_margin'})) > 0:
+#            linkbox = dom.findAll("div", {"class": "linkbox"})[-1]
+#            pages = 1
+#            postid = ''
+#            userid = ''
+#            post = ''
+#            # if there's more than 1 page of torrents
+#            linkbox_all_a = linkbox.findAll("a")
+#            if len(linkbox_all_a):
+#                # by default torrent page show last page of comments
+#                lastpage = linkbox_all_a[-1]['href']
+#                pages = int(lastpage[18:lastpage.find('&')]) + 1
+#            for comment in soup.findAll('table', {'class':'forum_post box vertical_margin'}):
+#                postid = comment.find("a", {"class":"post_id"}).string[1:]
+#
+#                all_comment_a = comment.findAll("a")
+#                userid = all_comment_a[1]['href'][12:]
+#                username = all_comment_a[1].string
+#                post = comment.find("div", {"id":"content" + postid})
+#                post = u''.join([post.string for post in post.findAll(text=True)])
+#                torrentInfo['torrent']['comments'].append({"postid":postid, "post":post, "userid":userid, "username":username})
+#
+#            torrentInfo['torrent']['commentspages'] = pages
 
         return torrentInfo
 
@@ -1289,8 +1296,9 @@ class Parser(object):
         artistInfo['releases'] = releases
         #is there an artist image?
         artistInfo['image'] = None
-        if soup.find('div', {'class':'box'}).find('img'):
-            artistInfo['image'] = soup.find('div', {'class':'box'}).find('img')['src']
+        div_box = soup.find('div', {'class': 'box'})
+        if div_box.find('img'):
+            artistInfo['image'] = div_box.find('img')['src']
         #is there any artist info?
         contents = soup.find('div', {'class':'body'}).contents
         if len(contents) > 0:
@@ -1315,9 +1323,11 @@ class Parser(object):
                     similarartists.append(self.utils._string(artist.contents[0].string))
         artistInfo['similarartists'] = similarartists
         #is there any request?
-        if soup.find('table', {'id':'requests'}):
-            for request in soup.find('table', {'id':'requests'}).findAll('tr', {'class':re.compile('row')}):
-                requests.append({'requestname':request.findAll('a')[1].string, 'id':request.findAll('a')[1]['href'][28:]})
+        table_requests = soup.find('table', {'id': 'requests'})
+        if table_requests:
+            for request in table_requests.findAll('tr', {'class':re.compile('row')}):
+                request_all_a_1 = request.findAll('a')[1]
+                requests.append({'requestname': request_all_a_1.string, 'id': request_all_a_1['href'][28:]})
 
         artistInfo['requests'] = requests
 
