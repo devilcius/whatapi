@@ -1382,13 +1382,13 @@ class Parser(object):
 
                     torrenttd_find_a = torrenttd.find("a")
                     torrenttd_all_a = torrenttd.findAll("a")
+
                     if len(torrenttd_all_a) == 2:
                         #one artist
                         torrentartist = (self.utils.decodeHTMLEntities(torrenttd_find_a.string), )
                         artistid = (torrenttd_find_a['href'][14:], )
                         torrentalbum = torrenttd_all_a[1].string
                         info = torrenttd_all_a[1].nextSibling.string.strip()
-
 
                     elif len(torrenttd_all_a) == 1:
                         #various artists
@@ -1412,6 +1412,15 @@ class Parser(object):
                         artistid = (torrenttd_all_a[-2]['href'][14:], )
                         torrentalbum = torrenttd_all_a[-1].string
                         info = torrenttd_all_a[-1].nextSibling.string.strip()
+                    
+                    elif torrenttd.find(text=re.compile('under')) and len(torrenttd_all_a) == 4:
+                        #two artists under another one (for classical music mainly)
+                        torrentartist = (self.utils.decodeHTMLEntities(torrenttd_all_a[0].string), \
+                                         self.utils.decodeHTMLEntities(torrenttd_all_a[1].string))
+                        artistid = (torrenttd_all_a[0]['href'][14:], \
+                                    torrenttd_all_a[1]['href'][14:])
+                        torrentalbum = torrenttd_all_a[3].string
+                        info = torrenttd_all_a[3].nextSibling.string.strip()
 
                     if 'Scene' in info:
                         isScene = True
