@@ -1,3 +1,4 @@
+from __future__ import with_statement
 # -*- coding: utf_8 -*-
 #################################################################################
 #
@@ -23,10 +24,12 @@
 __author__ = "devilcius"
 __date__ = "$Oct 23, 2010 11:21:12 PM$"
 
-
+import sys
+if sys.version_info < (2,5):
+    raise "must use python 2.5 or greater"
 import hashlib
 try:
-    from BeautifulSoup import BeautifulSoup, SoupStrainer
+    from BeautifulSoup import BeautifulSoup
 except:
     raise ImportError, "Please install BeautifulSoup 3.2 module from http://www.crummy.com/software/BeautifulSoup/#Download"
 import httplib
@@ -355,7 +358,8 @@ class _ShelfCacheBackend(object):
 
     def hasKey(self, key):
         with _ShelfCacheBackend.cache_lock:
-            return key in self.shelf.keys()
+                return self.shelf.has_key(key)
+
 
 
 class Request(object):
@@ -1383,21 +1387,21 @@ class Parser(object):
                     torrenttd_find_a = torrenttd.find("a")
                     torrenttd_all_a = torrenttd.findAll("a")
 
-                    if len(torrenttd_all_a) == 2:
+                    if len(torrenttd_all_a) == 5:
                         #one artist
                         torrentartist = (self.utils.decodeHTMLEntities(torrenttd_find_a.string), )
                         artistid = (torrenttd_find_a['href'][14:], )
                         torrentalbum = torrenttd_all_a[1].string
                         info = torrenttd_all_a[1].nextSibling.string.strip()
 
-                    elif len(torrenttd_all_a) == 1:
+                    elif len(torrenttd_all_a) == 4:
                         #various artists
                         torrentartist = ('Various Artists', )
                         artistid = ()
                         torrentalbum = torrenttd_find_a.string
                         info = torrenttd_find_a.nextSibling.string.strip()
 
-                    elif len(torrenttd_all_a) == 3:
+                    elif len(torrenttd_all_a) == 6:
                         #two artists
                         torrentartist = (self.utils.decodeHTMLEntities(torrenttd_all_a[0].string), \
                                          self.utils.decodeHTMLEntities(torrenttd_all_a[1].string))
@@ -1409,11 +1413,11 @@ class Parser(object):
                     elif torrenttd.find(text=re.compile('performed by')):
                         #performed by
                         torrentartist = (self.utils.decodeHTMLEntities(torrenttd_all_a[-2].string), )
-                        artistid = (torrenttd_all_a[-2]['href'][14:], )
-                        torrentalbum = torrenttd_all_a[-1].string
+                        artistid = (torrenttd_all_a[-5]['href'][14:], )
+                        torrentalbum = torrenttd_all_a[-4].string
                         info = torrenttd_all_a[-1].nextSibling.string.strip()
-                    
-                    elif torrenttd.find(text=re.compile('under')) and len(torrenttd_all_a) == 4:
+
+                    elif torrenttd.find(text=re.compile('under')) and len(torrenttd_all_a) == 7:
                         #two artists under another one (for classical music mainly)
                         torrentartist = (self.utils.decodeHTMLEntities(torrenttd_all_a[0].string), \
                                          self.utils.decodeHTMLEntities(torrenttd_all_a[1].string))
