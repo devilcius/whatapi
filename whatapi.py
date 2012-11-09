@@ -1412,10 +1412,18 @@ class Parser(object):
 
                     elif torrenttd.find(text=re.compile('performed by')):
                         #performed by
-                        torrentartist = (self.utils.decodeHTMLEntities(torrenttd_all_a[-2].string), )
-                        artistid = (torrenttd_all_a[-5]['href'][14:], )
+                        if len(torrenttd_all_a) == 7 and torrenttd.find(text=re.compile('\&')):
+                            #double performance!
+                            torrentartist = (self.utils.decodeHTMLEntities(torrenttd_all_a[1].string), \
+                                             self.utils.decodeHTMLEntities(torrenttd_all_a[2].string))
+                            artistid = (torrenttd_all_a[-5]['href'][14:], \
+                                        torrenttd_all_a[-6]['href'][14:])
+                        else:
+                            torrentartist = (self.utils.decodeHTMLEntities(torrenttd_all_a[1].string), )
+                            artistid = (torrenttd_all_a[-5]['href'][14:], )
+                            
                         torrentalbum = torrenttd_all_a[-4].string
-                        info = torrenttd_all_a[-1].nextSibling.string.strip()
+                        info = torrenttd_all_a[-4].nextSibling.string.strip()
 
                     elif torrenttd.find(text=re.compile('under')) and len(torrenttd_all_a) == 7:
                         #two artists under another one (for classical music mainly)
