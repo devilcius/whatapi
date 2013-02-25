@@ -23,6 +23,7 @@ from __future__ import with_statement
 
 __author__ = "devilcius"
 __date__ = "$Oct 23, 2010 11:21:12 PM$"
+__version__ = "0.3"
 
 import sys
 if sys.version_info < (2,5):
@@ -1341,6 +1342,7 @@ class Parser(object):
         """
             Parse a torrent's list page and returns a dictionnary with its information
         """
+
         torrentslist = []
         torrentssoup = dom.find("table", {"width": "100%"})
         pages = 0
@@ -1360,6 +1362,7 @@ class Parser(object):
                     self.totalpages = pages
                 else: #we are at the last page, no href
                     pages = self.totalpages + 1
+
             #fetch all tr except first one (column head)
             for torrent in torrentssoup.fetch('tr')[1:]:
                 #exclude non music torrents
@@ -1372,8 +1375,8 @@ class Parser(object):
                     torrentid = torrentrm[torrentrm.rfind('=') + 1:]
                     torrenttd = torrent.findAll('td')[1]
 
-                    # remove dataless elements
-                    torrenttags = torrenttd.div
+                    # remove dataless elements and tags links
+                    torrenttags = torrenttd.find('div', {'class' : 'tags'})
                     rightlinks = torrenttd.span
                     torrenttags.extract()
                     rightlinks.extract()
@@ -1384,8 +1387,10 @@ class Parser(object):
                     isScene = False
                     info = ""
 
+
                     torrenttd_find_a = torrenttd.find("a")
                     torrenttd_all_a = torrenttd.findAll("a")
+
 
                     if len(torrenttd_all_a) == 5:
                         #one artist
@@ -1421,7 +1426,7 @@ class Parser(object):
                         else:
                             torrentartist = (self.utils.decodeHTMLEntities(torrenttd_all_a[1].string), )
                             artistid = (torrenttd_all_a[-5]['href'][14:], )
-                            
+
                         torrentalbum = torrenttd_all_a[-4].string
                         info = torrenttd_all_a[-4].nextSibling.string.strip()
 
