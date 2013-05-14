@@ -1188,7 +1188,7 @@ class Parser(object):
         else:
             groupidurl = soup.findAll('div', {'class':'linkbox'})[0].find('a')['href']
             torrentInfo['torrent']['editioninfo'] = soup.findAll('td', {'class':'edition_info'})[0].find('strong').contents[-1]
-            regrlsmedia = re.compile('CD|DVD|Vinyl|Soundboard|SACD|Cassette|WEB|Blu-ray')
+            regrlsmedia = re.compile('CD|DVD|Vinyl|Soundboard|SACD|Cassette|WEB|Blu-ray|DAT')
             torrentInfo['torrent']['rlsmedia'] = regrlsmedia.search(torrentInfo['torrent']['editioninfo']).group(0)
             torrentInfo['torrent']['parentid'] = groupidurl[groupidurl.rfind("=") + 1:]
 
