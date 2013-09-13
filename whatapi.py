@@ -1242,7 +1242,7 @@ class Parser(object):
                         info = "%s%s" % (info, self.utils._string(content.string))
                         torrentdescription = "%s%s" % (torrentdescription, self.utils._string(content.string))
             torrentInfo['torrent']['torrentdescription'] = torrentdescription
-            regrlstype = re.compile('Album|Soundtrack|EP|Anthology|Compilation|DJ Mix|Single|Live album|Remix|Bootleg|Interview|Mixtape|Unknown')
+            regrlstype = re.compile('Album|Soundtrack|EP|Anthology|Compilation|DJ Mix|Single|Live album|Remix|Bootleg|Interview|Mixtape|Unknown|Demo')
             torrentInfo['torrent']['rlstype'] = regrlstype.search(soup.find('div', {'class':'thin'}).find('h2').contents[1]).group(0)
 
         torrentInfo['torrent']['comments'] = []
