@@ -1365,7 +1365,7 @@ class Parser(object):
             #fetch all tr except first one (column head)
             for torrent in torrentssoup.fetch('tr')[1:]:
                 #exclude non music torrents
-                if torrent.find('td').find('div')['class'][0:10] == 'cats_music':
+                if 'cats_music' in torrent.find('td').find('div')['class']:
 
                     torrenttag = torrent.find('td').contents[1]['title']
                     all_td_1_span_a = torrent.findAll('td')[1].find('span').findAll('a')
