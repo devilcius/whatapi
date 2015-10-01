@@ -1229,6 +1229,8 @@ class Parser(object):
                 torrentInfo['torrent']['foldername'] = self.utils.decodeHTMLEntities(foldername)
             files = soup.findAll('div', {'id':'files_%s' % id})[0].findAll('tr')
             for file in files[1:-1]:
+                if file.contents[0].string is None:
+                        continue
                 torrentfiles.append(self.utils.decodeHTMLEntities(file.contents[0].string))
             torrentInfo['torrent']['filelist'] = torrentfiles
             #is there any description?
