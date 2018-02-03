@@ -42,6 +42,7 @@ import shelve
 import tempfile
 import threading
 from htmlentitydefs import name2codepoint as n2cp
+import ssl
 
 
 """
@@ -332,12 +333,12 @@ def getWhatcdNetwork(username="", password=""):
     return WhatCD (
                    username=username,
                    password=password,
-                   site="ssl.what.cd",
+                   site="redacted.ch",
                    loginpage="/login.php",
                    headers={
                    "Content-type": "application/x-www-form-urlencoded",
                    'Accept-Charset': 'utf-8',
-                   'User-Agent': "whatapi [devilcius]"
+                   'User-Agent': "redactapi [devilcius]"
                    })
 
 
@@ -401,13 +402,14 @@ class Request(object):
         """Returns a ResponseBody object from the server."""
 
         #print "downloading from %s" % (self.path)
-        conn = httplib.HTTPSConnection(self.whatcd.site)
+        conn = httplib.HTTPSConnection(self.whatcd.site, context=ssl._create_unverified_context())
         rb = ResponseBody()
 
         if self.whatcd.isProxyEnabled():
             conn = httplib.HTTPSConnection(host=self.whatcd.getProxy()[0], port=self.whatcd.getProxy()[1])
             conn.request(method=self.type, url="https://" + self.whatcd.site + self.path, body=self.data, headers=self.headers)
         else:
+
             conn.request(self.type, self.path, self.data, self.headers)
 
         response = conn.getresponse()
@@ -561,11 +563,7 @@ class User(WhatBase):
             idform = {'action': "search", 'search': self.name}
             data = urllib.urlencode(idform)
             headers = self._request("GET", self.userpage + data, "", self.whatcd.headers).execute(True).headers
-            if dict(headers) is None:
-                return None
-            else:
-                self.userid = dict(headers)['location'][12:]
-                return self.userid
+            return dict(headers)['location'][12:]
 
     def getInfo(self):
         """
@@ -1229,8 +1227,8 @@ class Parser(object):
                 torrentInfo['torrent']['foldername'] = self.utils.decodeHTMLEntities(foldername)
             files = soup.findAll('div', {'id':'files_%s' % id})[0].findAll('tr')
             for file in files[1:-1]:
-                if file.contents[0].string is None:
-                        continue
+		if file.contents[0].string is None:
+			continue
                 torrentfiles.append(self.utils.decodeHTMLEntities(file.contents[0].string))
             torrentInfo['torrent']['filelist'] = torrentfiles
             #is there any description?
@@ -1345,7 +1343,7 @@ class Parser(object):
         """
 
         torrentslist = []
-        torrentssoup = dom.find("table", {"width": "100%"})
+        torrentssoup = dom.find("table", {"class": "torrent_table cats"})
         pages = 0
 
         #if there's at least 1 torrent in the list
@@ -1453,6 +1451,8 @@ class Parser(object):
                                         'year':torrentyear,
                                         'pages':pages,
                                         'scene':isScene})
+        else:
+            print "snached torrents table not found"
 
         return torrentslist
 
@@ -1516,4 +1516,4 @@ class Parser(object):
 
 
 if __name__ == "__main__":
-    print "Module to manage what.cd as a web service"
+    print "Module to manage redacted.ch as a web service"
