@@ -1,4 +1,5 @@
 from __future__ import with_statement
+from urlparse import urlparse, parse_qs
 # -*- coding: utf_8 -*-
 #################################################################################
 #
@@ -1371,7 +1372,7 @@ class Parser(object):
                     all_td_1_span_a = torrent.findAll('td')[1].find('span').findAll('a')
                     torrentdl = all_td_1_span_a[0]['href']
                     torrentrm = all_td_1_span_a[1]['href']
-                    torrentid = torrentrm[torrentrm.rfind('=') + 1:]
+                    torrentid = parse_qs(urlparse(torrentrm).query)['id'][0]
                     torrenttd = torrent.findAll('td')[1]
 
                     # remove dataless elements and tags links
