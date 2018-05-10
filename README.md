@@ -1,9 +1,9 @@
 #whatapi
 
-A python module to manage what.cd as a web service
+A python module to manage what.cd / redacted.ch as a web service
 
 
-A list of the implemented webservices (from what.cd )
+A list of the implemented webservices (from what.cd / redacted.ch )
 =====================================
 
 # User
