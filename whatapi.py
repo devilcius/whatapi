@@ -24,7 +24,7 @@ from urllib.parse import urlparse, parse_qs
 
 __author__ = "devilcius"
 __date__ = "$Oct 23, 2010 11:21:12 PM$"
-__version__ = "0.8"
+__version__ = "2.0"
 
 import sys
 if sys.version_info.major < 3:

@@ -1,16 +1,17 @@
 # chardet's setup.py
 from distutils.core import setup
+import setuptools
 
 setup(
     name = "whatapi",
-    packages = ['.'],
-    version = "0.1",
-    description = "Module to manage what.cd as a web service",
+    packages = setuptools.find_packages(),
+    version = "2.0",
+    description = "Module to manage redacted.cd as a web service",
     author = "devilcius",
     author_email = "devilcius@gmail.com",
     license = "WOL",
-    url = "http://predatum.com",
-    download_url = "http://predatum.com/whatapi-lastest.tgz",
+    url = "https://github.com/devilcius/whatapi",
+    download_url = "https://github.com/devilcius/whatapi/archive/refs/tags/v2.0.tar.gz",
     keywords = ["api", "webservice", "what.cd"],
     platforms = "Windows,Linux",
     classifiers = [
