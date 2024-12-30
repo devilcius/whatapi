@@ -334,11 +334,12 @@ def getWhatcdNetwork(username="", password=""):
 	return WhatCD (
 				   username=username,
 				   password=password,
-				   site="redacted.ch",
+				   site="redacted.sh",
 				   loginpage="/login.php",
 				   headers={
 				   "Content-type": "application/x-www-form-urlencoded",
 				   'Accept-Charset': 'utf-8',
+				   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
 				   'User-Agent': "redactapi [devilcius]"
 				   })
 
@@ -1518,4 +1519,4 @@ class Parser(object):
 
 
 if __name__ == "__main__":
-	print("Module to manage redacted.ch as a web service")
+	print("Module to manage redacted.sh as a web service")
